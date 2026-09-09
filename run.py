@@ -21,6 +21,8 @@ def main():
         reload=args.reload,
         reload_dirs=[str(Path(__file__).resolve().parent / "app")] if args.reload else None,
         workers=1,
+        proxy_headers=True,
+        forwarded_allow_ips="*" if on_render else "127.0.0.1",
     )
 
 

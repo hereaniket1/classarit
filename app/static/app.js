@@ -10,7 +10,8 @@ document.querySelectorAll(".sidebar .nav-link").forEach((button) => {
 async function markAttendance(classId, status) {
   const form = new FormData();
   form.append("status", status);
-  await fetch(`/api/classes/${classId}/attendance`, { method: "POST", body: form });
+  const response = await fetch(`/api/classes/${classId}/attendance`, { method: "POST", body: form, headers: { "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').content } });
+  if (!response.ok) { alert("Could not save attendance. Please refresh and try again."); return; }
   location.reload();
 }
 

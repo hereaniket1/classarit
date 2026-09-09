@@ -1,0 +1,9 @@
+{% extends "public_base.html" %}
+{% block title %}Google login · Classarit{% endblock %}
+{% block content %}
+<main class="callback-layout"><section class="login-card" id="auth-result" data-success="{{ 'true' if success else 'false' }}">
+  <div class="brand-mark">C</div>
+  {% if success %}<h1 class="h3">You're in.</h1><p>Your classroom is ready. Returning to Classarit…</p><a class="btn btn-primary" href="/dashboard">Open dashboard</a>
+  {% else %}<h1 class="h3">Let's try that again</h1><p>{{ message }}</p><a class="btn btn-primary" href="/login">Back to login</a>{% endif %}
+</section></main>
+{% endblock %}

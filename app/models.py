@@ -12,6 +12,7 @@ class Teacher(Base):
     __tablename__ = "teachers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    auth_user_id: Mapped[str | None] = mapped_column(String(36), unique=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     email: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
     phone: Mapped[str | None] = mapped_column(String(30))
@@ -97,6 +98,7 @@ class Material(Base):
     __tablename__ = "materials"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int | None] = mapped_column(ForeignKey("teachers.id"))
     title: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     subject: Mapped[str] = mapped_column(String(80), nullable=False)

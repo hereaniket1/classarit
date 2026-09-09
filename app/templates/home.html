@@ -1,0 +1,25 @@
+{% extends "public_base.html" %}
+{% block content %}
+<main class="landing">
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">YOUR CLASSROOM, CONNECTED</p>
+      <h1>More time to teach.<br><span>Room to grow.</span></h1>
+      <p class="hero-description">Your students, classes and payments, all in one place. Bring a little more calm to the way you teach.</p>
+      <div class="hero-actions"><a class="btn btn-primary btn-lg" href="/login">Log in to your classroom <span aria-hidden="true">→</span></a><button type="button" class="btn btn-link" data-signup>New to Classarit?</button></div>
+      <p class="hero-note">Made for independent teachers and the students they inspire.</p>
+    </div>
+    <div class="preview-panel" aria-label="Illustrative classroom dashboard">
+      <div class="preview-top"><span class="brand-mark">C</span><div><strong>A little clarity for your day</strong><p>Your classroom at a glance</p></div><span class="sample-label">Preview</span></div>
+      <div class="preview-metrics"><div><span>Today's classes</span><strong>3</strong></div><div><span>Active students</span><strong>12</strong></div><div><span>All in one place</span><strong>✓</strong></div></div>
+      <div class="preview-schedule"><span class="eyebrow">TODAY'S SCHEDULE</span><div class="preview-lesson"><span class="time-pill">10:00 AM</span><div><strong>Piano practice</strong><p>One-to-one lesson · 60 minutes</p></div><span class="lesson-dot"></span></div><div class="preview-lesson"><span class="time-pill">04:00 PM</span><div><strong>Finding your voice</strong><p>Singing lesson · 45 minutes</p></div><span class="lesson-dot"></span></div></div>
+      <div class="preview-bottom">Less admin. More moments that matter.</div>
+    </div>
+  </section>
+  <section class="feature-strip" aria-label="What you can manage">
+    <article><span class="feature-number">01</span><h2>Know your students</h2><p>Keep profiles, subjects and lesson details together.</p></article>
+    <article><span class="feature-number">02</span><h2>Stay on schedule</h2><p>See your classes and open meeting links from one place.</p></article>
+    <article><span class="feature-number">03</span><h2>Keep track simply</h2><p>View payments and organize your learning materials.</p></article>
+  </section>
+</main>
+{% endblock %}

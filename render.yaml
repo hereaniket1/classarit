@@ -11,6 +11,28 @@ services:
         value: "3.13.5"
       - key: CLASSARIT_DATA_DIR
         value: /var/data
+      - key: SESSION_SECRET_KEY
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_SCHEMA
+        value: classarit
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_SSLMODE
+        value: require
     disk:
       name: classarit-data
       mountPath: /var/data
