@@ -1,7 +1,10 @@
-from sqlalchemy import create_engine
+from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = "sqlite:///./teacherhub.db"
+from .config import DATA_DIR
+
+DATABASE_PATH = DATA_DIR / "classarit.db"
+DATABASE_URL = URL.create("sqlite", database=str(DATABASE_PATH))
 
 engine = create_engine(
     DATABASE_URL,

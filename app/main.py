@@ -10,25 +10,31 @@ from sqlalchemy.orm import Session, selectinload
 
 from .database import Base, engine, get_db, SessionLocal
 from . import models, schemas
+from .config import UPLOAD_DIR
 
 app = FastAPI(title="Classarit MVP")
-templates = Jinja2Templates(directory="app/templates")
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+APP_DIR = Path(__file__).resolve().parent
 
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
+app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+
+
+@app.get("/health", include_in_schema=False)
+def health():
+    return {"status": "ok"}
 
 
 def seed_data():
     db = SessionLocal()
     try:
-        teacher = db.query(models.Teacher).filter_by(email="demo@teacherhub.local").first()
+        teacher = db.query(models.Teacher).filter_by(email="demo@classarit.local").first()
         if teacher:
             return
         teacher = models.Teacher(
             name="Ananya Music Academy",
-            email="demo@teacherhub.local",
+            email="demo@classarit.local",
             phone="+91 90000 00000",
             default_class_duration=60,
             default_meeting_link="https://meet.google.com/demo-meeting",
