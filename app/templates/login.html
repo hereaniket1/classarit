@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TeacherHub Login</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    .login-wrap {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .login-card {
+      width: min(100%, 440px);
+      padding: 28px;
+      border-radius: 24px;
+      background: white;
+      border: 1px solid var(--line);
+      box-shadow: 0 20px 60px rgba(15,23,42,0.08);
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="brand mb-4">
+        <div class="brand-mark">T</div>
+        <div>
+          <div class="brand-title">TeacherHub</div>
+          <div class="brand-subtitle text-dark">Demo teacher login</div>
+        </div>
+      </div>
+      <h1 class="h4 mb-2">Welcome back</h1>
+      <p class="text-muted">Use the demo account to enter the dashboard.</p>
+      <div class="alert alert-info">Email: <strong>demo@teacherhub.local</strong></div>
+      <form method="post" action="/login">
+        <div class="mb-3">
+          <label class="form-label">Email</label>
+          <input class="form-control" type="email" value="demo@teacherhub.local" disabled>
+        </div>
+        <button class="btn btn-primary w-100" type="submit">Enter Dashboard</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

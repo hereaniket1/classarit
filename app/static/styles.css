@@ -1,0 +1,116 @@
+:root {
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --line: #e6ebf2;
+  --text: #172033;
+  --muted: #6f7a8c;
+  --accent: #2457ff;
+}
+
+body {
+  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--text);
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: #0f172a;
+  color: #fff;
+  padding: 24px;
+}
+
+.brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #2b6cff, #7c9dff);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+}
+
+.brand-title { font-weight: 700; font-size: 1.1rem; }
+.brand-subtitle { color: #b8c2d9; font-size: 0.88rem; }
+
+.sidebar .nav-link {
+  color: #d5def0;
+  border: 0;
+  text-align: left;
+  background: transparent;
+  padding: 12px 14px;
+  border-radius: 12px;
+}
+
+.sidebar .nav-link.active,
+.sidebar .nav-link:hover {
+  background: rgba(255,255,255,0.08);
+  color: white;
+}
+
+.content {
+  padding: 28px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 24px;
+}
+
+.page-section { display: none; }
+.page-section.active { display: block; }
+
+.metric-card, .card-panel, .info-card, .class-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(15,23,42,0.04);
+}
+
+.metric-card { padding: 18px; height: 100%; }
+.metric-label { color: var(--muted); font-size: 0.9rem; }
+.metric-value { font-size: 1.7rem; font-weight: 700; margin-top: 6px; }
+.card-panel { padding: 22px; margin-bottom: 20px; }
+.section-title { font-weight: 700; margin-bottom: 16px; font-size: 1.1rem; }
+.info-card { padding: 18px; }
+.class-card {
+  padding: 16px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.time-pill {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef3ff;
+  color: var(--accent);
+  font-weight: 600;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 992px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar { position: sticky; top: 0; z-index: 10; }
+  .content { padding: 18px; }
+  .topbar { flex-direction: column; }
+}
