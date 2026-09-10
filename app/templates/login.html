@@ -4,8 +4,8 @@
 <main class="login-layout">
   <section class="login-intro"><p class="eyebrow">WELCOME TO YOUR CLASSROOM</p><h1>Pick up where<br>you left off.</h1><p>Your teaching day, a little more organized.</p><a href="/">← Back to home</a></section>
   <section class="login-card" aria-labelledby="login-title">
-    <div class="brand-mark">C</div><h2 id="login-title">Welcome back</h2>
-    <p class="text-muted">Log in to your Classarit dashboard.</p>
+    <div class="brand-mark">C</div><h2 id="login-title">{% if invitation_pending %}Log in to accept your invitation{% else %}Welcome back{% endif %}</h2>
+    <p class="text-muted">{% if invitation_pending %}Continue with the Google email address your team invited. After login, you’ll return to the invitation.{% else %}Log in to your Classarit dashboard.{% endif %}</p>
     <button type="button" class="google-button" id="google-login" {% if not google_ready %}disabled{% endif %}><span class="google-letter" aria-hidden="true">G</span>Continue with Google</button>
     <p class="login-help">A secure Google window will open to complete your login.</p>
     <p id="login-status" role="status" aria-live="polite">{% if not google_ready %}Google login will be available soon. Please check back later.{% endif %}</p>

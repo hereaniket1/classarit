@@ -1,47 +1,81 @@
-from datetime import date
+"""Workspace selection and onboarding pages; data APIs live in workspaces/routes."""
+
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
-from sqlalchemy.orm import Session, selectinload
-from ..database import get_db
-from .. import models
+from fastapi.responses import HTMLResponse, RedirectResponse
 from ..views import templates
-from ..auth.dependencies import require_user
-from ..services.ownership import get_teacher
+from ..auth.dependencies import require_user, current_user
+from ..workspaces.db import transaction
+from ..workspaces.services.organizations import memberships
 
 router = APIRouter()
 
+
 @router.get("/dashboard", response_class=HTMLResponse)
-def dashboard(request: Request, db: Session = Depends(get_db), teacher=Depends(get_teacher), user=Depends(require_user)):
-    today = date.today()
-    sessions = db.query(models.ClassSession).join(models.Student).filter(models.Student.teacher_id == teacher.id).options(selectinload(models.ClassSession.student)).order_by(models.ClassSession.date, models.ClassSession.start_time).all()
-    payments = db.query(models.Payment).join(models.Student).filter(models.Student.teacher_id == teacher.id).all()
-    active_students = db.query(models.Student).filter(models.Student.teacher_id == teacher.id).filter(models.Student.active.is_(True)).count()
-    today_sessions = [s for s in sessions if s.date == today]
-    upcoming_sessions = [s for s in sessions if s.date >= today]
-    pending_payments = sum(max((p.amount_due or 0) - (p.amount_paid or 0), 0) for p in payments if p.status in {"Due", "Partial", "Overdue"})
-    monthly_revenue = sum(p.amount_paid or 0 for p in payments if p.payment_date and p.payment_date.month == today.month and p.payment_date.year == today.year)
-    materials = db.query(models.Material).filter_by(teacher_id=teacher.id).order_by(models.Material.created_date.desc()).all()
-    students = db.query(models.Student).filter_by(teacher_id=teacher.id).order_by(models.Student.name).all()
-    assignments = db.query(models.Assignment).join(models.Student).filter(models.Student.teacher_id == teacher.id).all()
+def dashboard(request: Request, db=Depends(transaction), user=Depends(require_user)):
+    if request.session.get("pending_invitation"):
+        return RedirectResponse(
+            "/invitations/" + request.session["pending_invitation"], 303
+        )
+    choices = memberships(db, user)
+    selected = request.query_params.get("workspace") or request.session.get(
+        "workspace_id"
+    )
+    workspace = next(
+        (w for w in choices if str(w["id"]) == selected),
+        choices[0] if choices else None,
+    )
+    if workspace:
+        request.session["workspace_id"] = str(workspace["id"])
     return templates.TemplateResponse(
-        "dashboard.html",
+        "workspace.html",
         {
             "request": request,
             "user": user,
             "csrf_token": request.session.get("csrf", ""),
-            "teacher": teacher,
-            "students": students,
-            "sessions": sessions,
-            "today_sessions": today_sessions,
-            "upcoming_sessions": upcoming_sessions,
-            "active_students": active_students,
-            "pending_payments": pending_payments,
-            "monthly_revenue": monthly_revenue,
-            "payments": payments,
-            "materials": materials,
-            "assignments": assignments,
-            "today": today,
+            "workspaces": choices,
+            "workspace": workspace,
+            "invitation": None,
         },
     )
 
 
+@router.get("/workspaces/new", response_class=HTMLResponse)
+def onboarding(request: Request, user=Depends(require_user)):
+    return templates.TemplateResponse(
+        "workspace.html",
+        {
+            "request": request,
+            "user": user,
+            "csrf_token": request.session.get("csrf", ""),
+            "workspaces": [],
+            "workspace": None,
+            "invitation": None,
+        },
+    )
+
+
+@router.get("/invitations/{token}", name="invitation_page", response_class=HTMLResponse)
+def invitation_page(token: str, request: Request):
+    if len(token) > 100:
+        return RedirectResponse("/dashboard", 303)
+    user = current_user(request)
+    if not user:
+        request.session["pending_invitation"] = token
+        return RedirectResponse("/login", 303)
+    return templates.TemplateResponse(
+        "workspace.html",
+        {
+            "request": request,
+            "user": user,
+            "csrf_token": request.session.get("csrf", ""),
+            "workspaces": [],
+            "workspace": None,
+            "invitation": token,
+        },
+    )
+
+
+@router.post("/api/invitations/dismiss")
+def dismiss(request: Request, user=Depends(require_user)):
+    request.session.pop("pending_invitation", None)
+    return {"ok": True}

@@ -3,6 +3,7 @@ Run: .venv/bin/python -B -m unittest discover -s tests -v
 Requires local initdb/pg_ctl (PostgreSQL 14+).
 """
 import os
+import sys
 import re
 import subprocess
 import tempfile
@@ -13,7 +14,10 @@ from unittest.mock import AsyncMock, patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class LoginTests(unittest.TestCase):
+from workspace_cases import WorkspaceCases
+
+
+class LoginTests(WorkspaceCases, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix='classarit-tests-',dir='/tmp')
@@ -33,6 +37,8 @@ class LoginTests(unittest.TestCase):
         # Match hosted installations where citext already lives in public.
         subprocess.run(cmd+['-c','CREATE EXTENSION citext WITH SCHEMA public'],check=True,stdout=subprocess.DEVNULL)
         subprocess.run(cmd+['-f',str(ROOT/'setup/auth_schema.sql')],check=True,stdout=subprocess.DEVNULL)
+        for _ in range(2):
+            subprocess.run([sys.executable,str(ROOT/'setup/apply_migration.py'),'001_workspaces_and_teaching.sql'],check=True,stdout=subprocess.DEVNULL)
         from app.main import app
         from fastapi.testclient import TestClient
         cls.app=app; cls.client_type=TestClient

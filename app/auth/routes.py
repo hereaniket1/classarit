@@ -30,7 +30,7 @@ def result(request, success=False, message=''):
 def login_page(request: Request):
     if current_user(request):
         return RedirectResponse('/dashboard', status_code=303)
-    return templates.TemplateResponse('login.html', {'request':request, 'google_ready':settings.ready})
+    return templates.TemplateResponse('login.html', {'request':request, 'google_ready':settings.ready, 'invitation_pending':bool(request.session.get('pending_invitation'))})
 
 
 @router.get('/auth/google/login')
@@ -55,8 +55,12 @@ async def google_callback(request: Request):
         user = await run_in_threadpool(repository.google_account, claims)
         await run_in_threadpool(repository.revoke_session, request.session.get('sid'))
         sid = await run_in_threadpool(repository.create_session, user['id'])
+        # Keep only the invitation intent while rotating authentication state.
+        pending_invitation = request.session.get('pending_invitation')
         request.session.clear()
         request.session.update(sid=sid, csrf=secrets.token_urlsafe(32))
+        if pending_invitation:
+            request.session['pending_invitation'] = pending_invitation
         return result(request, success=True)
     except repository.LinkingRequired:
         return result(request, message='This email is already registered with another login method. Account linking is coming soon.')
