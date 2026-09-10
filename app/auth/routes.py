@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from ..views import templates
-from .settings import get_settings
+from .settings import get_settings, google_callback_url
 from .dependencies import current_user
 from . import repository
 
@@ -28,8 +28,6 @@ def result(request, success=False, message=''):
 
 @router.get('/login')
 def login_page(request: Request):
-    if settings.ready and str(request.base_url).rstrip('/') != settings.origin:
-        return RedirectResponse(settings.origin + '/login', status_code=303)
     if current_user(request):
         return RedirectResponse('/dashboard', status_code=303)
     return templates.TemplateResponse('login.html', {'request':request, 'google_ready':settings.ready})
@@ -39,11 +37,8 @@ def login_page(request: Request):
 async def google_login(request: Request):
     if not settings.ready:
         return result(request, message='Google login is not available yet. Please try again later.')
-    # Keep the entire popup flow on the configured origin, including its state cookie.
-    if str(request.base_url).rstrip('/') != settings.origin:
-        return RedirectResponse(settings.origin + '/auth/google/login', status_code=303)
     try:
-        return await oauth.google.authorize_redirect(request, settings.redirect_uri, prompt='select_account')
+        return await oauth.google.authorize_redirect(request, google_callback_url(request), prompt='select_account')
     except Exception:
         logger.warning('Could not start Google authorization')
         return result(request, message='Unable to reach Google. Please try again.')

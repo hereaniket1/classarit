@@ -41,9 +41,10 @@ this README's diagrams in Markdown preview.
 2. In Google Cloud, configure an OAuth **Web application**, consent screen and any
    test users required while the application is in testing mode. Register the exact
    redirect URI: `http://127.0.0.1:8000/auth/google/callback` for local development.
-3. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and a random
-   `SESSION_SECRET_KEY` of at least 32 characters. Use the same hostname consistently;
-   the login page redirects to the configured origin to keep OAuth cookies consistent.
+3. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The callback is built from the
+   current request origin plus `/auth/google/callback`; no redirect environment variable
+   is used. Stay on the same hostname throughout login. The signing key is generated
+   and saved automatically unless an optional `SESSION_SECRET_KEY` is supplied.
 4. Initialize a fresh PostgreSQL authentication schema with `setup/auth_schema.sql`.
    If you already installed the earlier five-table design, run only
    `setup/auth_sessions.sql` to add revocable sessions. No destructive migration runs
@@ -204,10 +205,11 @@ or configure an existing service with:
 | Data directory | `CLASSARIT_DATA_DIR=/var/data` |
 | Persistent disk | `/var/data`, 1 GB, paid instance |
 
-Set Google, DB and session variables in Render's Environment settings. Register
+Set Google and DB credentials in Render's Environment settings. Register
 `https://YOUR-SERVICE.onrender.com/auth/google/callback` in Google Cloud and use that
-exact `GOOGLE_REDIRECT_URI`. Render requires an HTTPS callback and a session secret.
-Its proxy headers are trusted by the launcher only when `RENDER=true`; do not set
+HTTPS callback in Google Cloud. No callback or session-secret environment variable
+is required. The request host and trusted proxy scheme determine the callback.
+Proxy headers are trusted by the launcher only when `RENDER=true`; do not set
 that flag locally. PostgreSQL must be initialized before login can succeed.
 
 The Blueprint uses paid persistent storage for teaching data and uploads. PostgreSQL
@@ -223,11 +225,10 @@ credential belongs in `.env.example`, source files or the README.
 | Variables | Purpose |
 | --- | --- |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth credentials |
-| `GOOGLE_REDIRECT_URI` | Exact absolute callback ending in `/auth/google/callback` |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL credentials; distinct from the SQLite teaching database |
 | `DB_SCHEMA` | Authentication schema, default `classarit` |
 | `DB_SSLMODE` | PostgreSQL TLS policy; use `require` or the provider's stricter recommendation for hosted databases |
-| `SESSION_SECRET_KEY` | Stable random signing secret, minimum 32 characters |
+| `SESSION_SECRET_KEY` | Optional shared signing key (minimum 32 characters when supplied); otherwise generated automatically |
 | `CLASSARIT_DATA_DIR` | SQLite/uploads directory; defaults to the project root |
 | `RESEND_API_KEY`, `RESEND_FROM_EMAIL` | Reserved for future OTP sending; not used yet |
 | `OTP_HMAC_SECRET` | Reserved for future OTP hashing; separate from the session secret |
@@ -235,6 +236,35 @@ credential belongs in `.env.example`, source files or the README.
 Resend uses an API key, not a client ID. No email is sent by this release.
 Missing Google settings leave the landing page available with login disabled.
 A database/provider failure shows a generic login error without exposing secrets.
+
+
+### Automatic callback and session signing
+
+The app uses `request.url_for("google_callback")`, so the browser's origin determines
+its callback:
+
+- Local: `http://127.0.0.1:8000/auth/google/callback`.
+- Remote: `https://myremote.example.com/auth/google/callback`.
+- Opening via `localhost` instead of `127.0.0.1` produces a `localhost` callback;
+  register that exact URL too if you use it.
+
+Render's trusted proxy headers tell Uvicorn the original HTTPS scheme. The launcher
+already enables this on Render; other hosting platforms must configure their own
+trusted proxy correctly. Non-local HTTP login is refused. Google still requires an
+exact match in its authorized redirect list and otherwise returns
+`redirect_uri_mismatch`. Old `GOOGLE_REDIRECT_URI` environment values are ignored.
+See [FastAPI proxy handling](https://fastapi.tiangolo.com/advanced/behind-a-proxy/).
+
+The session signing key prevents modification of the cookie containing OAuth state,
+CSRF data and the opaque session token. It is not a Google credential. When
+`SESSION_SECRET_KEY` is absent, a random key is saved with private permissions at
+`CLASSARIT_DATA_DIR/.session_secret` (project root by default). Concurrent processes
+sharing that directory reuse the same key. It is ignored by Git and never served.
+The Render persistent disk preserves it across restarts and deploys. On ephemeral
+storage, replacing the filesystem changes the key and users must sign in again.
+For multiple replicas on separate disks, set the same optional `SESSION_SECRET_KEY`
+on every replica. Removing or changing any active key also invalidates old cookies.
+HTTPS requests receive Secure cookies; localhost HTTP remains supported.
 
 ## Authentication database DDL
 

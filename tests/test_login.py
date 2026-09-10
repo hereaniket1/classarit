@@ -61,6 +61,40 @@ class LoginTests(unittest.TestCase):
         html=client.get('/dashboard').text
         return re.search(r'name="csrf-token" content="([^"]+)"',html).group(1)
 
+    def test_automatic_callback_urls(self):
+        from urllib.parse import parse_qs,urlsplit
+        from app.auth.routes import oauth
+        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+        metadata={'authorization_endpoint':'https://accounts.google.com/o/oauth2/v2/auth'}
+        with patch.object(oauth.google,'load_server_metadata',new=AsyncMock(return_value=metadata)):
+            for origin in ['http://127.0.0.1:8000','http://localhost:8000','https://myremote.example.com']:
+                with self.client_type(self.app,base_url=origin) as client:
+                    response=client.get('/auth/google/login',follow_redirects=False)
+                    query=parse_qs(urlsplit(response.headers['location']).query)
+                    self.assertEqual(query['redirect_uri'],[origin+'/auth/google/callback'])
+                    self.assertEqual('; secure' in response.headers['set-cookie'].lower(),origin.startswith('https'))
+            # Render terminates TLS before forwarding to Uvicorn.
+            proxied=ProxyHeadersMiddleware(self.app,trusted_hosts=['testclient'])
+            with self.client_type(proxied,base_url='http://myremote.example.com') as client:
+                response=client.get('/auth/google/login',headers={'X-Forwarded-Proto':'https'},follow_redirects=False)
+                query=parse_qs(urlsplit(response.headers['location']).query)
+                self.assertEqual(query['redirect_uri'],['https://myremote.example.com/auth/google/callback'])
+                self.assertIn('; secure',response.headers['set-cookie'].lower())
+            with self.client_type(self.app,base_url='http://myremote.example.com') as client:
+                self.assertEqual(client.get('/auth/google/login').status_code,400)
+
+    def test_generated_key_persists_without_required_environment(self):
+        from app.auth.settings import get_settings
+        with tempfile.TemporaryDirectory() as directory, patch('app.auth.settings.DATA_DIR',Path(directory)), patch.dict(os.environ,{'SESSION_SECRET_KEY':'','RENDER':'true','GOOGLE_REDIRECT_URI':'obsolete-value'}):
+            first=get_settings()
+            second=get_settings()
+            self.assertTrue(first.ready)
+            self.assertEqual(first.session_secret,second.session_secret)
+            self.assertGreaterEqual(len(first.session_secret),32)
+            self.assertEqual((Path(directory)/'.session_secret').stat().st_mode & 0o077,0)
+            with patch.dict(os.environ,{'SESSION_SECRET_KEY':'explicit-shared-key-of-at-least-32-characters'}):
+                self.assertEqual(get_settings().session_secret,'explicit-shared-key-of-at-least-32-characters')
+
     def test_public_routes_and_no_demo_bypass(self):
         self.assertEqual(self.client.get('/').status_code,200)
         self.assertIn('data-signup',self.client.get('/').text)

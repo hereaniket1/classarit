@@ -1,12 +1,11 @@
 """Application composition; routes and services live in dedicated modules."""
-import secrets
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from starlette.middleware.sessions import SessionMiddleware
+from .auth.middleware import RequestSessionMiddleware
 
 from .auth.settings import get_settings
 from .auth.routes import router as auth_router
@@ -29,9 +28,8 @@ async def lifespan(app):
 
 settings = get_settings()
 app = FastAPI(title='Classarit', lifespan=lifespan)
-app.add_middleware(SessionMiddleware, secret_key=settings.session_secret or secrets.token_urlsafe(48),
-                   session_cookie='classarit_session', max_age=43200, same_site='lax',
-                   https_only=settings.secure_cookies)
+app.add_middleware(RequestSessionMiddleware, secret_key=settings.session_secret,
+                   session_cookie='classarit_session', max_age=43200, same_site='lax')
 app.mount('/static', StaticFiles(directory=PROJECT_DIR / 'app' / 'static'), name='static')
 app.include_router(public_router)
 app.include_router(auth_router)

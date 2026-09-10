@@ -1,46 +1,64 @@
 import os
+import secrets
+import tempfile
 from dataclasses import dataclass
-from urllib.parse import urlsplit
+from pathlib import Path
 
-from ..config import PROJECT_DIR  # loads local .env before reading settings
+from fastapi import Request
+
+from ..config import DATA_DIR  # loads local .env before reading settings
+
+
+def session_signing_key():
+    """Use an optional shared key, otherwise atomically persist a generated key."""
+    configured = os.getenv('SESSION_SECRET_KEY', '').strip()
+    if configured:
+        if len(configured) < 32:
+            raise ValueError('An explicitly set SESSION_SECRET_KEY must contain at least 32 characters')
+        return configured
+    key_path = DATA_DIR / '.session_secret'
+    if not key_path.exists():
+        # Publish a complete file atomically; concurrent workers use the same winner.
+        with tempfile.NamedTemporaryFile(mode='w', dir=DATA_DIR, prefix='.session_secret-', delete=False) as temporary:
+            temporary.write(secrets.token_urlsafe(48))
+            temporary.flush()
+            os.fsync(temporary.fileno())
+            temporary_path = Path(temporary.name)
+        try:
+            try:
+                os.link(temporary_path, key_path)
+            except FileExistsError:
+                pass
+        finally:
+            temporary_path.unlink()
+    key = key_path.read_text().strip()
+    if len(key) < 32:
+        raise ValueError('The saved session signing key is invalid; restore it or set SESSION_SECRET_KEY')
+    return key
 
 
 @dataclass(frozen=True)
 class AuthSettings:
     client_id: str
     client_secret: str
-    redirect_uri: str
     session_secret: str
-    secure_cookies: bool
 
     @property
     def ready(self):
-        return bool(self.client_id and self.client_secret and self.redirect_uri and self.session_secret)
+        return bool(self.client_id and self.client_secret)
 
-    @property
-    def origin(self):
-        parsed = urlsplit(self.redirect_uri)
-        return f"{parsed.scheme}://{parsed.netloc}"
+
+def google_callback_url(request: Request):
+    """Build the registered callback on the origin that began the login flow."""
+    url = request.url_for('google_callback')
+    if url.scheme != 'https' and url.hostname not in ('localhost', '127.0.0.1', '::1'):
+        raise ValueError('Open Classarit over HTTPS to sign in with Google')
+    return str(url)
 
 
 def get_settings():
-    hosted = os.getenv("RENDER", "").lower() == "true"
-    redirect = os.getenv("GOOGLE_REDIRECT_URI", "").strip()
-    secret = os.getenv("SESSION_SECRET_KEY", "").strip()
-    if secret and len(secret) < 32:
-        raise ValueError("SESSION_SECRET_KEY must contain at least 32 characters")
-    if redirect:
-        parsed = urlsplit(redirect)
-        if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.query or parsed.fragment:
-            raise ValueError("GOOGLE_REDIRECT_URI must be an absolute callback URL")
-        if parsed.path != "/auth/google/callback":
-            raise ValueError("GOOGLE_REDIRECT_URI must end with /auth/google/callback")
-        if parsed.scheme == "http" and parsed.hostname not in ("localhost", "127.0.0.1"):
-            raise ValueError("Non-local Google callbacks require HTTPS")
-    if hosted and (not secret or not redirect.startswith("https://")):
-        raise ValueError("Render requires SESSION_SECRET_KEY and an HTTPS GOOGLE_REDIRECT_URI")
     return AuthSettings(
-        os.getenv("GOOGLE_CLIENT_ID", "").strip(),
-        os.getenv("GOOGLE_CLIENT_SECRET", "").strip(),
-        redirect, secret, hosted or redirect.startswith("https://"),
+        os.getenv('GOOGLE_CLIENT_ID', '').strip(),
+        os.getenv('GOOGLE_CLIENT_SECRET', '').strip(),
+        session_signing_key(),
     )
