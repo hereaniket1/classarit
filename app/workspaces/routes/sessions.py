@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..access import access, MANAGERS
 from ..schemas import (
     SessionInput,
+    RecurringSessionInput,
+    RecurringSeriesUpdateInput,
     RescheduleInput,
     ParticipantInput,
     CancelInput,
@@ -18,6 +20,26 @@ router = APIRouter(prefix="/api/workspaces/{workspace_id}")
 @router.post("/sessions", status_code=201)
 def create(p: SessionInput, a=Depends(access)):
     return scheduling.create(a, p)
+
+
+@router.post("/sessions/recurring", status_code=201)
+def create_recurring(p: RecurringSessionInput, a=Depends(access)):
+    return scheduling.create_recurring(a, p)
+
+
+@router.post("/recurring-series/{series_id}/disable")
+def disable_recurring_series(series_id: UUID, a=Depends(access)):
+    return scheduling.disable_recurring_series(a, series_id)
+
+
+@router.patch("/recurring-series/{series_id}")
+def update_recurring_series(series_id: UUID, p: RecurringSeriesUpdateInput, a=Depends(access)):
+    return scheduling.update_recurring_series(a, series_id, p)
+
+
+@router.post("/recurring-series/{series_id}/restore")
+def restore_recurring_series(series_id: UUID, a=Depends(access)):
+    return scheduling.restore_recurring_series(a, series_id)
 
 
 @router.patch("/sessions/{session_id}")

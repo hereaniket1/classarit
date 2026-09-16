@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -33,7 +33,7 @@ class InviteInput(Input):
 
 
 class MemberInput(Input):
-    roles: list[Literal["OWNER", "ADMIN", "OPERATOR", "TEACHER"]] = Field(min_length=1)
+    roles: list[Literal["ADMIN", "OPERATOR", "TEACHER"]] = Field(default_factory=list)
     status: Literal["ACTIVE", "SUSPENDED", "LEFT"] = "ACTIVE"
 
 
@@ -86,8 +86,28 @@ class EnrollmentInput(Input):
 class SessionInput(Input):
     program_id: UUID
     title: str | None = None
+    student_ids: list[UUID] = Field(default_factory=list)
     starts_at: datetime
     ends_at: datetime | None = None
+    delivery_mode: Literal["ONLINE", "IN_PERSON", "HYBRID"] | None = None
+    meeting_url: str | None = None
+    venue_id: UUID | None = None
+    space_id: UUID | None = None
+    capacity: int | None = Field(default=None, gt=0, le=10000)
+    teacher_ids: list[UUID] | None = None
+
+
+class RecurringSessionInput(Input):
+    program_id: UUID
+    title: str | None = None
+    student_ids: list[UUID] = Field(default_factory=list)
+    start_date: date
+    start_time: time
+    duration_minutes: int | None = Field(default=None, gt=0, le=1440)
+    repeat_weekdays: list[
+        Literal["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+    ] = Field(min_length=1, max_length=7)
+    repeat_months: int = Field(default=1, ge=1, le=24)
     delivery_mode: Literal["ONLINE", "IN_PERSON", "HYBRID"] | None = None
     meeting_url: str | None = None
     venue_id: UUID | None = None
@@ -103,6 +123,10 @@ class RescheduleInput(Input):
     meeting_url: str | None = None
     venue_id: UUID | None = None
     space_id: UUID | None = None
+
+
+class RecurringSeriesUpdateInput(Input):
+    title: str | None = Field(default=None, max_length=150)
 
 
 class ParticipantInput(Input):

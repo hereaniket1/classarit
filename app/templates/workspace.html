@@ -1,3 +1,4 @@
+{% from 'components/icons.html' import icon %}
 <!doctype html>
 <html lang="en">
   <head>
@@ -11,53 +12,61 @@
     />
     <link rel="stylesheet" href="/static/styles.css" />
     <link rel="stylesheet" href="/static/workspace.css" />
-    <script type="module" src="/static/workspaces/main.js"></script>
-  </head>
+    <link rel="stylesheet" href="/static/account-dashboard.css" />
+    <script type="module" src="/static/workspaces/main.js?v=workspace-reporting-20260915"></script>
+    <link rel="stylesheet" href="/static/responsive.css">
+  <script src="/static/responsive.js" defer></script>
+    <link rel="stylesheet" href="/static/workspace-compact.css?v=workspace-reporting-20260915">
+</head>
   <body
     data-workspace="{{ workspace.id if workspace else '' }}"
     data-invitation="{{ invitation or '' }}"
+    data-teacher-only="{{ 'true' if teacher_only else 'false' }}"
+    data-owner-view="{{ 'true' if owner_view else 'false' }}"
   >
     <div class="workspace-shell">
       <aside class="workspace-sidebar">
-        <a class="workspace-brand" href="/dashboard"
+        <a class="workspace-brand" href="/dashboard?overview=1"
           ><span class="brand-mark">C</span> Classarit</a
         >
-        <p class="workspace-user">
-          {{ user.full_name or 'Your teaching space' }}
-        </p>
-        {% if workspace %}<label for="workspace-switch">Your workspace</label
-        ><select id="workspace-switch" class="form-select">
-          {% for item in workspaces %}
-          <option value="{{ item.id }}" {% if item.id == workspace.id %}selected{% endif %}>
-            {{ item.name }}
-          </option>
-          {% endfor %}</select
-        ><a href="/workspaces/new" class="workspace-add">+ Add a workspace</a>
+        <a class="account-profile" href="/dashboard?overview=1" aria-label="Open main dashboard">
+          <span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span>
+          <span><strong>{{ user.full_name or 'My account' }}</strong><small>{{ user.user_type }}</small></span>
+        </a>
+        {% if workspace %}
+
         <nav aria-label="Workspace sections">
-          {% for key,title in [('overview','Overview'),('classes','Classes &
-          events'),('students','Students'),('sessions','Schedule &
-          attendance'),('venues','Venues'),('team','Team'),('makeups','Makeup
-          classes')] %}<button type="button" data-tab="{{ key }}">
-            {{ title }}</button
-          >{% endfor %}
+          {% if teacher_only %}
+            {% set sections = [('classes','My classes'),('sessions','My schedule & attendance')] %}
+          {% else %}
+            {% set sections = [('calendar','Calendar'),('classes','Classes & events'),('students','Students'),('sessions','Schedule & attendance'),('venues','Venues'),('team','Team'),('makeups','Makeup classes')] %}{% if owner_view %}{% set sections = sections + [('reporting','Reporting')] %}{% endif %}
+          {% endif %}
+          {% for key,title in sections %}<button type="button" data-tab="{{ key }}" title="{{ title }}">{{ icon({'calendar':'calendar','classes':'classes','students':'students','sessions':'calendar','venues':'venue','team':'teachers','makeups':'makeup','reporting':'reporting'}[key]) }}<span>{{ title }}</span></button>{% endfor %}
         </nav>
         {% endif %}
         <div class="workspace-footer">
-          <a href="/legacy/dashboard">Previous dashboard</a
-          ><button type="button" id="logout">Log out</button>
+
+          <button type="button" id="logout">Log out</button>
         </div>
       </aside>
       <main class="workspace-main">
         <header>
           <div>
-            <p class="eyebrow">YOUR TEACHING DAY, ORGANIZED</p>
-            <h1>
-              {{ workspace.name if workspace else 'Welcome to Classarit' }}
-            </h1>
-            <p class="text-muted">
-              {{ workspace.timezone if workspace else 'One place for your
-              classes, people and possibilities.' }}
-            </p>
+
+            <div class="workspace-title-row">
+              <h1>{{ workspace.name if workspace else 'Welcome to Classarit' }}</h1>
+              {% if workspace %}
+              <label class="workspace-picker"><span>Switch workspace</span>
+                {{ icon('workspaces') }}
+                <select id="workspace-picker" aria-label="Switch workspace" title="Switch workspace">
+                  {% for choice in workspaces %}
+                  <option value="{{ choice.id }}" {{ 'selected' if choice.id|string == workspace.id|string else '' }}>{{ choice.name }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+
+              {% endif %}
+            </div>
           </div>
         </header>
         <div id="notice" role="status" aria-live="polite" hidden></div>

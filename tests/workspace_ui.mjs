@@ -32,7 +32,12 @@ const { render } = await import(
 );
 const future = new Date(Date.now() + 86400000).toISOString();
 const data = {
-  workspace: { id: "workspace", name: "Test", timezone: "Asia/Kolkata" },
+  workspace: {
+    id: "workspace",
+    name: "Test",
+    timezone: "Asia/Kolkata",
+    workspace_type: "INDIVIDUAL",
+  },
   roles: ["OWNER", "TEACHER"],
   membership_id: "member",
   members: [
@@ -74,11 +79,36 @@ const data = {
       status: "ACTIVE",
     },
   ],
+  recurring_series: [
+    {
+      id: "series",
+      program_id: "program",
+      title: "Weekly Lesson",
+      start_date: "2026-09-01",
+      start_time: "09:00:00",
+      repeat_weekdays: ["MON", "WED"],
+      repeat_months: 3,
+      status: "ACTIVE",
+    },
+  ],
   sessions: [
     {
       id: "session",
       program_id: "program",
       title: "Lesson",
+      starts_at: future,
+      ends_at: future,
+      status: "SCHEDULED",
+      delivery_mode: "ONLINE",
+      meeting_url: "https://example.com",
+      capacity: 10,
+    },
+    {
+      id: "series-session",
+      program_id: "program",
+      recurring_series_id: "series",
+      edited_from_series: false,
+      title: "Weekly Lesson",
       starts_at: future,
       ends_at: future,
       status: "SCHEDULED",
@@ -119,13 +149,14 @@ const data = {
   },
 };
 for (const tab of [
-  "overview",
+  "calendar",
   "classes",
   "students",
   "venues",
   "team",
   "sessions",
   "makeups",
+  "reporting",
 ]) {
   const html = render(structuredClone(data), tab);
   assert.ok(html.length > 0);
@@ -153,13 +184,17 @@ for (const [key, id] of [
   ["release", "booking"],
   ["complete", "session"],
   ["end-enrollment", "enrollment"],
+  ["disable-series", "series"],
 ]) {
   action(structuredClone(data), key, id, async () => {});
   assert.ok(document.querySelector("#editor").open, key);
   assert.ok(!form.innerHTML.includes("[object Object]"), key);
+  const namedControls = [...form.elements].filter(
+    (e) => e.name && !e.closest?.(".weekday-picker"),
+  );
   assert.equal(
-    new Set([...form.elements].filter((e) => e.name).map((e) => e.name)).size,
-    [...form.elements].filter((e) => e.name).length,
+    new Set(namedControls.map((e) => e.name)).size,
+    namedControls.length,
     key,
   );
   document.querySelector("#editor").close();
@@ -184,6 +219,10 @@ form.elements.teaching_format.value = "ONE_TO_ONE";
 form.onchange();
 assert.equal(form.elements.capacity.value, "1");
 await form.onsubmit({ preventDefault() {} });
+assert.ok(document.querySelector("#save-overlay"));
+assert.ok(document.querySelector(".editor-save-loader"));
+assert.equal(document.body.getAttribute("aria-busy"), "false");
+assert.equal(document.querySelector("#editor").classList.contains("is-saving"), false);
 assert.equal(sent.url, "/api/workspaces/workspace/programs");
 assert.equal(sent.options.headers["X-CSRF-Token"], "test-csrf");
 const payload = JSON.parse(sent.options.body);
@@ -195,6 +234,24 @@ action(structuredClone(data), "edit-student", "student", async () => {});
 assert.equal(form.elements.full_name.value, data.students[0].full_name);
 await form.onsubmit({ preventDefault() {} });
 assert.equal(sent.options.method, "PATCH");
+action(structuredClone(data), "disable-series", "series", async () => {});
+await form.onsubmit({ preventDefault() {} });
+assert.equal(sent.url, "/api/workspaces/workspace/recurring-series/series/disable");
+assert.equal(sent.options.method, "POST");
+sent = undefined;
+action(structuredClone(data), "session", "program", async () => {});
+form.elements.schedule_type.value = "once";
+form.elements.student_ids.options[0].selected = true;
+form.onchange();
+await form.onsubmit({ preventDefault() {} });
+assert.equal(sent.url, "/api/workspaces/workspace/sessions");
+assert.equal(sent.options.method, "POST");
+const oneTimePayload = JSON.parse(sent.options.body);
+assert.equal(oneTimePayload.program_id, "program");
+assert.deepEqual(oneTimePayload.student_ids, ["student"]);
+assert.ok(!("repeat_weekdays" in oneTimePayload));
+assert.ok(!("repeat_months" in oneTimePayload));
+assert.equal(document.querySelector("#editor-error").textContent, "");
 globalThis.fetch = async () => ({
   ok: false,
   status: 409,
@@ -218,5 +275,5 @@ const blocks = [
 ];
 for (const block of blocks) await mermaid.parse(block[1]);
 console.log(
-  `Passed: seven dashboard sections, nineteen dialogs, form payloads/CSRF/errors/XSS escaping, and ${blocks.length} Mermaid diagrams.`,
+  `Passed: seven dashboard sections, twenty dialogs including repeat scheduling, form payloads/CSRF/errors/XSS escaping, and ${blocks.length} Mermaid diagrams.`,
 );

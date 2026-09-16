@@ -108,7 +108,7 @@ body {
   justify-content: flex-end;
 }
 
-@media (max-width: 992px) {
+@media (max-width: 800px) {
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { position: sticky; top: 0; z-index: 10; }
   .content { padding: 18px; }

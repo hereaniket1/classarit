@@ -12,7 +12,6 @@ from .auth.routes import router as auth_router
 from .auth.dependencies import require_user
 from .routes.public import router as public_router
 from .routes.dashboard import router as dashboard_router
-from .routes.legacy_dashboard import router as legacy_dashboard_router
 from .workspaces.routes import router as workspace_router
 from .routes.teaching import router as teaching_router
 from .config import PROJECT_DIR, UPLOAD_DIR
@@ -37,13 +36,12 @@ app.include_router(public_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
 app.include_router(teaching_router)
-app.include_router(legacy_dashboard_router)
 app.include_router(workspace_router)
 
 
 @app.exception_handler(HTTPException)
 async def auth_errors(request: Request, exc: HTTPException):
-    if exc.status_code == 401 and request.url.path in ('/dashboard','/workspaces/new','/legacy/dashboard'):
+    if exc.status_code == 401 and (request.url.path in ('/dashboard','/legacy/dashboard') or request.url.path.startswith('/workspaces/')):
         return RedirectResponse('/login',status_code=303)
     return JSONResponse({'detail':exc.detail},status_code=exc.status_code,headers=exc.headers)
 
@@ -51,8 +49,10 @@ async def auth_errors(request: Request, exc: HTTPException):
 @app.middleware('http')
 async def private_responses(request: Request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith(('/auth/', '/api/', '/uploads/', '/dashboard', '/login', '/workspaces/', '/invitations/', '/legacy/')):
-        response.headers['Cache-Control'] = 'no-store'
+    if request.url.path.startswith(('/auth/', '/api/', '/uploads/', '/dashboard', '/login', '/workspaces/', '/invitations/', '/legacy/', '/static/')):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
     return response

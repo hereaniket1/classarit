@@ -148,9 +148,18 @@ def cancel(a, sid, p):
         raise HTTPException(
             409, "A session with recorded attendance cannot be cancelled."
         )
+    edited_from_series = bool(session.get("recurring_series_id"))
+    title = session.get("title") or "Session"
+    if edited_from_series and not session.get("edited_from_series") and not title.endswith(" - Edited"):
+        title = f"{title} - Edited"
     a.db.execute(
-        "UPDATE {s}.class_sessions SET status='CANCELLED',cancelled_at=CURRENT_TIMESTAMP,cancellation_reason=:r WHERE id=:id",
+        """UPDATE {s}.class_sessions
+        SET title=:title,status='CANCELLED',cancelled_at=CURRENT_TIMESTAMP,cancellation_reason=:r,
+            edited_from_series=:edited,series_edited_at=CASE WHEN :edited THEN CURRENT_TIMESTAMP ELSE series_edited_at END
+        WHERE id=:id""",
+        title=title,
         r=p.reason,
+        edited=edited_from_series or session.get("edited_from_series", False),
         id=sid,
     )
     for booking in a.db.all(

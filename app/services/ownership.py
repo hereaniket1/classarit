@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..database import get_db
-from ..auth.dependencies import require_user
+from ..auth.dependencies import require_legacy_user
 
 
 def upgrade_local_ownership(engine):
@@ -20,7 +20,7 @@ def upgrade_local_ownership(engine):
         conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS uq_teachers_auth_user_id ON teachers(auth_user_id)'))
 
 
-def get_teacher(db: Session = Depends(get_db), user=Depends(require_user)):
+def get_teacher(db: Session = Depends(get_db), user=Depends(require_legacy_user)):
     teacher = db.query(models.Teacher).filter_by(auth_user_id=user['id']).first()
     if teacher:
         return teacher

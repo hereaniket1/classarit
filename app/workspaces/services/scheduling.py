@@ -1,11 +1,51 @@
 """Session timing, resource conflicts, roster capacity, and attendance."""
 
+import calendar
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from ..access import MANAGERS
 from .catalog import location, teachers
 
+
+
+WEEKDAY_INDEX = {
+    "MON": 0,
+    "TUE": 1,
+    "WED": 2,
+    "THU": 3,
+    "FRI": 4,
+    "SAT": 5,
+    "SUN": 6,
+}
+MAX_RECURRING_OCCURRENCES = 200
+
+
+def add_months(day, months):
+    month = day.month - 1 + months
+    year = day.year + month // 12
+    month = month % 12 + 1
+    return day.replace(day=min(day.day, calendar.monthrange(year, month)[1]), month=month, year=year)
+
+
+def recurring_dates(start_date, repeat_months, repeat_weekdays):
+    selected = {WEEKDAY_INDEX[day] for day in dict.fromkeys(repeat_weekdays)}
+    until = add_months(start_date, repeat_months) - timedelta(days=1)
+    day = start_date
+    dates = []
+    while day <= until:
+        if day.weekday() in selected:
+            dates.append(day)
+            if len(dates) > MAX_RECURRING_OCCURRENCES:
+                raise HTTPException(
+                    422,
+                    f"Create {MAX_RECURRING_OCCURRENCES} or fewer sessions at a time. Reduce the repeat months or selected days.",
+                )
+        day += timedelta(days=1)
+    if not dates:
+        raise HTTPException(422, "Choose at least one repeat day on or after the start date.")
+    return dates
 
 def instant(a, value):
     if value.tzinfo is None:
@@ -121,8 +161,45 @@ def add_participant(a, session, student_id, kind, enrollment_id=None):
     )
 
 
-def create(a, p):
-    a.allow(*MANAGERS)
+def add_direct_participants(a, session, student_ids, kind):
+    for student_id in list(dict.fromkeys(student_ids or [])):
+        existing = a.db.first(
+            "SELECT * FROM {s}.session_participants WHERE workspace_id=:w AND session_id=:s AND student_id=:st",
+            w=a.id,
+            s=session["id"],
+            st=student_id,
+        )
+        if existing and existing["status"] == "BOOKED":
+            continue
+        add_participant(a, session, student_id, kind)
+
+
+def roster_student_ids(a, program_id, day, selected_student_ids):
+    student_ids = {
+        row["student_id"]
+        for row in a.db.all(
+            "SELECT student_id FROM {s}.enrollments WHERE workspace_id=:w AND program_id=:p AND status='ACTIVE' AND starts_on<=:day AND (ends_on IS NULL OR ends_on>=:day)",
+            w=a.id,
+            p=program_id,
+            day=day,
+        )
+    }
+    for student_id in selected_student_ids or []:
+        student_ids.add(student_id)
+    return student_ids
+
+
+def validate_roster_capacity(a, prog, start, capacity, selected_student_ids):
+    day = start.astimezone(ZoneInfo(a.workspace["timezone"])).date()
+    total = len(roster_student_ids(a, prog["id"], day, selected_student_ids))
+    if total > capacity:
+        raise HTTPException(
+            409,
+            f"This schedule has {capacity} seat{'s' if capacity != 1 else ''}, but {total} students would be booked. Increase seats or choose fewer students.",
+        )
+
+
+def session_defaults(a, p):
     prog = a.program(p.program_id)
     ids = teachers(
         a,
@@ -156,6 +233,13 @@ def create(a, p):
     capacity = p.capacity or prog["capacity"]
     if prog["teaching_format"] == "ONE_TO_ONE" and capacity != 1:
         raise HTTPException(422, "One-to-one sessions have one seat.")
+    return prog, ids, start, end, mode, url, vid, space, capacity
+
+
+def create(a, p):
+    a.allow(*MANAGERS)
+    prog, ids, start, end, mode, url, vid, space, capacity = session_defaults(a, p)
+    validate_roster_capacity(a, prog, start, capacity, getattr(p, "student_ids", []))
     row = a.db.insert(
         "class_sessions",
         workspace_id=a.id,
@@ -169,6 +253,9 @@ def create(a, p):
         venue_id=vid,
         space_id=space,
         capacity=capacity,
+        recurring_series_id=getattr(p, "recurring_series_id", None),
+        series_original_starts_at=getattr(p, "series_original_starts_at", None),
+        edited_from_series=getattr(p, "edited_from_series", False),
     )
     conflicts(a, row, teacher_ids=ids)
     for mid in ids:
@@ -186,7 +273,158 @@ def create(a, p):
         day=day,
     ):
         add_participant(a, row, en["student_id"], "ENROLLMENT", en["id"])
+    direct_kind = "EVENT" if prog["program_kind"] == "EVENT" else "DIRECT"
+    add_direct_participants(a, row, getattr(p, "student_ids", []), direct_kind)
     return row
+
+def create_recurring(a, p):
+    a.allow(*MANAGERS)
+    if p.start_time.tzinfo is not None:
+        raise HTTPException(422, "Use a local start time without a timezone offset.")
+    dates = recurring_dates(p.start_date, p.repeat_months, p.repeat_weekdays)
+    first_start = datetime.combine(dates[0], p.start_time)
+    duration = p.duration_minutes
+    preview = SimpleNamespace(
+        program_id=p.program_id,
+        title=p.title,
+        starts_at=first_start,
+        ends_at=first_start + timedelta(minutes=duration) if duration else None,
+        delivery_mode=p.delivery_mode,
+        meeting_url=p.meeting_url,
+        venue_id=p.venue_id,
+        space_id=p.space_id,
+        capacity=p.capacity,
+        teacher_ids=p.teacher_ids,
+    )
+    prog, ids, start, end, mode, url, vid, space, capacity = session_defaults(a, preview)
+    duration_minutes = int((end - start).total_seconds() // 60)
+    repeat_weekdays = list(dict.fromkeys(p.repeat_weekdays))
+    for day in dates:
+        validate_roster_capacity(
+            a,
+            prog,
+            instant(a, datetime.combine(day, p.start_time)),
+            capacity,
+            p.student_ids,
+        )
+    series = a.db.insert(
+        "recurring_session_series",
+        workspace_id=a.id,
+        program_id=prog["id"],
+        title=p.title or prog["name"],
+        start_date=p.start_date,
+        start_time=p.start_time,
+        duration_minutes=duration_minutes,
+        repeat_weekdays=repeat_weekdays,
+        repeat_months=p.repeat_months,
+        delivery_mode=mode,
+        meeting_url=url,
+        venue_id=vid,
+        space_id=space,
+        capacity=capacity,
+        created_by_membership_id=a.member["id"],
+    )
+    rows = []
+    for day in dates:
+        original_start = instant(a, datetime.combine(day, p.start_time))
+        rows.append(
+            create(
+                a,
+                SimpleNamespace(
+                    program_id=prog["id"],
+                    title=p.title,
+                    starts_at=datetime.combine(day, p.start_time),
+                    ends_at=datetime.combine(day, p.start_time) + timedelta(minutes=duration_minutes),
+                    delivery_mode=mode,
+                    meeting_url=url,
+                    venue_id=vid,
+                    space_id=space,
+                    capacity=capacity,
+                    teacher_ids=ids,
+                    student_ids=p.student_ids,
+                    recurring_series_id=series["id"],
+                    series_original_starts_at=original_start,
+                    edited_from_series=False,
+                ),
+            )
+        )
+    return {"count": len(rows), "series": series, "sessions": rows}
+
+def disable_recurring_series(a, series_id):
+    a.allow(*MANAGERS)
+    series = a.db.get("recurring_session_series", a.id, series_id)
+    if series["status"] != "ACTIVE":
+        return {"ok": True, "cancelled_count": 0, "series": series}
+    result = a.db.execute(
+        """UPDATE {s}.class_sessions
+        SET status='CANCELLED',cancelled_at=CURRENT_TIMESTAMP,cancellation_reason='Recurring schedule disabled'
+        WHERE workspace_id=:w
+          AND recurring_series_id=:series
+          AND edited_from_series=false
+          AND status='SCHEDULED'
+          AND starts_at>CURRENT_TIMESTAMP
+        RETURNING id""",
+        w=a.id,
+        series=series_id,
+    )
+    cancelled_count = len(result.fetchall())
+    updated = a.db.first(
+        "UPDATE {s}.recurring_session_series SET status='ARCHIVED' WHERE workspace_id=:w AND id=:id RETURNING *",
+        w=a.id,
+        id=series_id,
+    )
+    return {"ok": True, "cancelled_count": cancelled_count, "series": updated}
+
+
+def update_recurring_series(a, series_id, p):
+    a.allow(*MANAGERS)
+    series = a.db.get("recurring_session_series", a.id, series_id)
+    program = a.program(series["program_id"])
+    title = p.title or program["name"]
+    updated = a.db.first(
+        "UPDATE {s}.recurring_session_series SET title=:title WHERE workspace_id=:w AND id=:id RETURNING *",
+        title=title,
+        w=a.id,
+        id=series_id,
+    )
+    a.db.execute(
+        """UPDATE {s}.class_sessions
+        SET title=:title
+        WHERE workspace_id=:w
+          AND recurring_series_id=:series
+          AND edited_from_series=false
+          AND status='SCHEDULED'
+          AND starts_at>CURRENT_TIMESTAMP""",
+        title=title,
+        w=a.id,
+        series=series_id,
+    )
+    return updated
+
+
+def restore_recurring_series(a, series_id):
+    a.allow(*MANAGERS)
+    series = a.db.get("recurring_session_series", a.id, series_id)
+    updated = a.db.first(
+        "UPDATE {s}.recurring_session_series SET status='ACTIVE' WHERE workspace_id=:w AND id=:id RETURNING *",
+        w=a.id,
+        id=series_id,
+    )
+    result = a.db.execute(
+        """UPDATE {s}.class_sessions
+        SET status='SCHEDULED', cancelled_at=NULL, cancellation_reason=NULL
+        WHERE workspace_id=:w
+          AND recurring_series_id=:series
+          AND edited_from_series=false
+          AND status='CANCELLED'
+          AND cancellation_reason='Recurring schedule disabled'
+          AND starts_at>CURRENT_TIMESTAMP
+        RETURNING id""",
+        w=a.id,
+        series=series_id,
+    )
+    restored_count = len(result.fetchall())
+    return {"ok": True, "restored_count": restored_count, "series": updated}
 
 
 def reschedule(a, sid, p):
@@ -198,13 +436,19 @@ def reschedule(a, sid, p):
     url, vid, space = location(
         a, p.delivery_mode, p.meeting_url, p.venue_id, p.space_id
     )
+    edited_from_series = bool(row.get("recurring_series_id"))
+    title = row.get("title") or "Session"
+    if edited_from_series and not row.get("edited_from_series") and not title.endswith(" - Edited"):
+        title = f"{title} - Edited"
     row.update(
+        title=title,
         starts_at=start,
         ends_at=end,
         delivery_mode=p.delivery_mode,
         meeting_url=url,
         venue_id=vid,
         space_id=space,
+        edited_from_series=edited_from_series or row.get("edited_from_series", False),
     )
     mids = [
         r["membership_id"]
@@ -238,13 +482,18 @@ def reschedule(a, sid, p):
         )
     conflicts(a, row, mids, students)
     a.db.execute(
-        "UPDATE {s}.class_sessions SET starts_at=:start,ends_at=:end,delivery_mode=:mode,meeting_url=:url,venue_id=:v,space_id=:sp WHERE id=:id",
+        """UPDATE {s}.class_sessions
+        SET title=:title,starts_at=:start,ends_at=:end,delivery_mode=:mode,meeting_url=:url,venue_id=:v,space_id=:sp,
+            edited_from_series=:edited,series_edited_at=CASE WHEN :edited THEN CURRENT_TIMESTAMP ELSE series_edited_at END
+        WHERE id=:id""",
+        title=title,
         start=start,
         end=end,
         mode=p.delivery_mode,
         url=url,
         v=vid,
         sp=space,
+        edited=row["edited_from_series"],
         id=sid,
     )
     return row

@@ -1,10 +1,10 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from ...auth.dependencies import require_user
 from ..db import transaction
 from ..access import access
 from ..schemas import WorkspaceInput, InviteInput, MemberInput, PolicyInput
-from ..services import organizations, queries, makeups
+from ..services import organizations, queries, makeups, overview
 
 router = APIRouter(prefix="/api")
 
@@ -31,6 +31,21 @@ def accept(
 @router.get("/workspaces/{workspace_id}/snapshot")
 def snapshot(a=Depends(access)):
     return queries.snapshot(a)
+
+
+@router.get("/workspaces/{workspace_id}/calendar")
+def calendar(month: str = Query(pattern=r"^\d{4}-\d{2}$"), a=Depends(access)):
+    return queries.calendar_month(a, month)
+
+
+@router.get("/workspaces/{workspace_id}/section/{section}")
+def workspace_section(
+    section: str,
+    month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    history: bool = False,
+    a=Depends(access),
+):
+    return queries.section(a, section, month, history=history)
 
 
 @router.post("/workspaces/{workspace_id}/invitations", status_code=201)
@@ -60,3 +75,8 @@ def member(member_id: UUID, p: MemberInput, a=Depends(access)):
 @router.put("/workspaces/{workspace_id}/makeup-policy")
 def policy(p: PolicyInput, a=Depends(access)):
     return makeups.policy(a, p)
+
+
+@router.get("/dashboard/overview")
+def account_overview(user=Depends(require_user), db=Depends(transaction)):
+    return overview.dashboard_data(db, user)

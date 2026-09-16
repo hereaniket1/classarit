@@ -1,0 +1,87 @@
+{% from "components/icons.html" import icon %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Overview · Classarit</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/workspace.css">
+  <link rel="stylesheet" href="/static/account-dashboard.css">
+  <script type="module" src="/static/account-dashboard.js"></script>
+  <link rel="stylesheet" href="/static/responsive.css">
+  <script src="/static/responsive.js" defer></script>
+</head>
+<body>
+<div class="workspace-shell">
+  <aside class="workspace-sidebar">
+    <a class="workspace-brand" href="/dashboard"><span class="brand-mark">C</span> Classarit</a>
+    <a class="account-profile" href="/dashboard" aria-label="Open main dashboard">
+      <span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span>
+      <span><strong>{{ user.full_name or 'My account' }}</strong><small>{{ user.user_type }}</small></span>
+    </a>
+    <nav aria-label="Account navigation"><a class="account-nav active" href="/dashboard">My dashboard</a></nav>
+    <div class="workspace-footer"><button type="button" id="logout">Log out</button></div>
+  </aside>
+  <main class="workspace-main account-main">
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    {% if appowner %}
+      <header><p class="eyebrow">APPOWNER</p><h1>Product performance</h1></header>
+      <section class="workspace-card"><h2>Coming later</h2><p>This dedicated account is reserved for Classarit product performance. The product analytics dashboard will be added in a later release.</p></section>
+    {% else %}
+      <header class="section-heading account-heading">
+        {% set has_workspace_context = owned_workspaces or assigned_workspaces %}
+        <h1>{{ 'Overview' if is_owner else ('Welcome' if can_create and not has_workspace_context else 'My classes') }}</h1>
+      </header>
+      {% if is_owner %}
+      <div class="metric-grid account-metrics">
+        {% for label,key,glyph,hint in [
+          ('Workspaces','workspaces','workspaces','Active owned workspaces'),
+          ('Students','students','students','Active student records; counted separately in each workspace'),
+          ('Classes','classes','classes','Classes and events across owned workspaces'),
+          ('Active teachers','active_teachers','teachers','Unique active teaching accounts across owned workspaces, including owners who teach')
+        ] %}
+        <div class="metric" title="{{ hint }}"><span class="metric-icon">{{ icon(glyph) }}</span><div><strong>{{ totals[key] }}</strong><span>{{ label }}</span></div></div>
+        {% endfor %}
+      </div>
+      <div class="portfolio-grid">
+      {% for item in owned_workspaces %}
+        <section class="workspace-card portfolio-card">
+          <div class="portfolio-title">
+            <div><h2>{{ item.name }}</h2><span class="workspace-kind">{{ 'Individual' if item.workspace_type=='INDIVIDUAL' else 'Institute' }}</span></div>
+            <div class="portfolio-actions">
+              <button type="button" class="default-workspace-button {{ 'is-default' if item.is_default else '' }}" data-default-workspace="{{ item.id }}" title="{{ 'This opens automatically after login' if item.is_default else 'Open this workspace by default after login' }}" aria-label="{{ 'Default workspace: ' if item.is_default else 'Make default workspace: ' }}{{ item.name }}" {% if item.is_default %}disabled{% endif %}>{{ icon('default') }}<span>{{ 'Default' if item.is_default else 'Make default' }}</span></button>
+              <a class="icon-button manage-workspace" href="/workspaces/{{ item.id }}" aria-label="Manage workspace: {{ item.name }}" title="Manage workspace">{{ icon('gear') }}</a>
+            </div>
+          </div>
+          <div class="portfolio-counts">
+            <span>{{ icon('students') }} <strong>{{ item.student_count }}</strong> students</span>
+            <span>{{ icon('classes') }} <strong>{{ item.programs|length }}</strong> classes</span>
+            <span>{{ icon('teachers') }} <strong>{{ item.teacher_count }}</strong> teachers</span>
+          </div>
+          <div class="ranking-block"><h3>Top classes <small>by students</small></h3>
+            {% if item.popular %}<ol class="class-ranking">{% for program in item.popular %}<li><span>{{ program.name }}</span><strong>{{ program.students }} <small>{{ 'student' if program.students == 1 else 'students' }}</small></strong></li>{% endfor %}</ol>{% else %}<p class="ranking-empty">No enrollments yet</p>{% endif %}
+          </div>
+          <div class="ranking-block"><h3>Most used <small>last 30 days</small></h3>
+            {% if item.most_used %}<ol class="class-ranking">{% for program in item.most_used %}<li><span>{{ program.name }}</span><strong>{{ program.completed_sessions }} <small>{{ 'session' if program.completed_sessions == 1 else 'sessions' }}</small></strong></li>{% endfor %}</ol>{% else %}<p class="ranking-empty">No completed sessions</p>{% endif %}
+          </div>
+        </section>
+      {% endfor %}
+      </div>
+      {% endif %}
+      {% if assigned_workspaces %}
+        {% if is_owner %}<h2 class="assigned-heading">My teaching teams</h2>{% endif %}
+        {% for item in assigned_workspaces %}
+        <section class="workspace-card assigned-workspace"><div class="section-heading"><div><p class="eyebrow">{{ item.roles|join(' · ') }}</p><h2>{{ item.name }}</h2></div><a class="btn btn-outline-primary" href="/workspaces/{{ item.id }}">{{ 'Manage workspace' if item.can_manage else 'View my classes' }} →</a></div>
+          {% if item.classes %}<div class="assigned-classes">{% for program in item.classes %}<a href="/workspaces/{{ item.id }}#classes" class="assigned-class"><strong>{{ program.name }}</strong><span>{{ program.upcoming_sessions }} upcoming sessions</span></a>{% endfor %}</div>{% else %}<p class="text-muted">No assigned classes yet.</p>{% endif %}
+        </section>
+        {% endfor %}
+      {% endif %}
+      {% if not owned_workspaces and not assigned_workspaces %}<section class="workspace-card onboarding"><h2>{{ 'Create your first workspace' if can_create else 'No active class assignments' }}</h2><p>{{ 'Set up an individual practice or institute. You will be its owner and can also teach and manage daily operations.' if can_create else 'Contact your workspace administrator to restore your access.' }}</p>{% if can_create %}<a class="btn btn-primary" href="/workspaces/new">Set up my workspace</a>{% endif %}</section>{% endif %}
+    {% endif %}
+  </main>
+</div>
+</body>
+</html>

@@ -14,6 +14,7 @@ teams, students, classes, sports events, attendance and makeup lessons.
 - [Environment variables](#environment-variables)
 - [Authentication database DDL](#authentication-database-ddl)
 - [Future login methods](#future-login-methods)
+- [Owner dashboard and account types](#owner-dashboard-and-account-types)
 - [Workspace and teaching data flow](#workspace-and-teaching-data-flow)
 - [UI walkthrough and API reference](#ui-walkthrough-and-api-reference)
 - [Progressive implementation plan](#progressive-implementation-plan)
@@ -31,15 +32,33 @@ python run.py --reload
 Open <http://127.0.0.1:8000>. The landing page is public; `/login` offers Google,
 and `/dashboard` requires a valid session. There is no demo bypass. On a fresh
 installation, configure `.env`, initialize [authentication DDL](#authentication-database-ddl),
-then run `python setup/apply_migration.py 001_workspaces_and_teaching.sql` before
-opening the signed-in dashboard. Existing configured databases with the journaled
+then run migrations `001_workspaces_and_teaching.sql`,
+`002_account_types_and_single_owner.sql`, `003_owner_staff_separation.sql`, `004_recurring_session_series.sql`, `005_workspace_type_role_policy.sql` and `006_direct_scheduled_participants.sql` in order with
+`python setup/apply_migration.py FILENAME` before opening the signed-in dashboard. Existing configured databases with the journaled
 migration skip safely.
 
-In IntelliJ, select `.venv/bin/python` as the project interpreter and run the root
-`run.py` file. Leave parameters blank for debugging, or use `--reload` for local
-reloads. The working directory can be the project root; asset/database paths are
-resolved from the source files. Enable the JetBrains Mermaid plugin to render
-this README's diagrams in Markdown preview.
+Two shared IntelliJ Python run configurations are saved in `.run/`, outside the
+ignored `.idea/` directory:
+
+- **Classarit Local** — normal Run or Debug, with breakpoints and no reloader.
+- **Classarit Local Reload** — Run with automatic reload after Python changes.
+
+Open the project root in IntelliJ, then choose one from the top-right run configuration
+selector and click Run (or Debug for **Classarit Local**). Both use
+`$PROJECT_DIR$/.venv/bin/python`, execute the root `run.py`, and set the working
+directory to the project root. They explicitly use `RENDER=false` and `PORT=8000`.
+The app loads credentials from the existing `.env`; no credentials are stored in the
+run configurations. Run only one configuration at a time to avoid a port conflict.
+
+If they do not appear, ensure IntelliJ's Python plugin is enabled and reopen the
+project. Under **Run → Edit Configurations**, select **Classarit Local** and confirm
+its Python interpreter points to your project's `.venv/bin/python`. If the virtual
+environment is missing, run the setup commands above first. The saved project SDK
+may still refer to Python 3.10; these configurations explicitly use the project's
+virtual environment instead.
+
+The terminal equivalent is `.venv/bin/python run.py` (add `--reload` for reloads).
+Enable the JetBrains Mermaid plugin to render this README's diagrams in Markdown preview.
 
 ## Google login setup
 
@@ -88,11 +107,13 @@ flowchart TD
     Active -->|Yes| Session[Create hashed server session and rotate cookie state]
     Session --> Notify[Notify parent or detect session by polling]
     Notify --> Dashboard[Redirect to private dashboard]
-    Dashboard --> Workspace{Has active workspace?}
-    Workspace -->|No| Onboard[Create individual or institute workspace]
-    Workspace -->|Yes| Switch[Open remembered workspace]
-    Onboard --> Request[Check session, membership, role and assignment on each request]
-    Switch --> Request
+    Dashboard --> Type{Account type}
+    Type -->|OWNER| Portfolio[All owned workspaces and class rankings]
+    Type -->|MEMBER| Assigned[Assigned classes or first-workspace setup]
+    Type -->|APPOWNER| Product[Reserved product performance page]
+    Portfolio --> Manage[Select workspace gear]
+    Assigned --> Manage
+    Manage --> Request[Check session, membership, role and assignment on each request]
     Request --> Logout[Logout revokes server session and clears cookie]
     Logout --> Home
 ```
@@ -106,10 +127,13 @@ login displays a retry option. OAuth tokens are not persisted.
 
 ### Workspace dashboard
 
-- Google login opens workspace onboarding for a new account. Choose an individual
-  practice or institute; the creator receives Owner and Teacher roles.
-- Create multiple workspaces, switch between them, and remember the last selection.
-- Overview cards show students, programs, upcoming sessions and unexpired open credits.
+- Google login opens an account dashboard. An OWNER sees all owned workspaces,
+  current student rankings and class usage over the last 30 days.
+- Each owned workspace has a gear beside its title to manage it. Workspace details open only after
+  explicit selection. Switch workspace and the top-left user icon return to the main dashboard.
+- Invited teachers see only assigned classes and their schedule/attendance. First-time
+  users without memberships can create a workspace, becoming its single OWNER.
+- Workspace-level Calendar is the default workspace tab. Reporting is owner-only and holds metric cards for students, classes, upcoming sessions and active teachers.
 - The existing navy/blue style continues in a responsive dashboard with real forms.
 
 ### Team and teaching setup
@@ -126,8 +150,10 @@ login displays a retry option. OAuth tokens are not persisted.
 
 ### Scheduling, attendance and makeup classes
 
-- Schedule occurrences from program defaults. Active eligible enrollments populate
-  the roster; enrolling later also populates already-scheduled future sessions.
+- Schedule one occurrence or generate a weekly repeat by selecting multiple weekdays
+  and a repeat duration in months. The schedule form can select students directly;
+  active eligible enrollments also populate every created roster. Enrolling later
+  still populates already-scheduled future sessions.
 - Reschedule future sessions, cancel with an explanation, join online meetings,
   open venue directions, mark attendance and complete finished sessions.
 - Reject teacher, student and venue/space overlaps and full classes/sessions.
@@ -138,20 +164,28 @@ login displays a retry option. OAuth tokens are not persisted.
 - Teacher-only members see their assigned teaching records and relevant students;
   management actions remain restricted by backend role checks.
 
-### Previous dashboard
+### Dynamic workspace screens
 
-`/legacy/dashboard` preserves the previous account-scoped SQLite dashboard, payment
-records, materials and upload APIs. Its placeholder dialogs are unchanged. Those
-records are **not** shared with the new PostgreSQL workspace dashboard. No legacy
-records are automatically assigned or copied into a new business.
+The previous dashboard and its static UI assets have been removed; `/legacy/dashboard`
+returns 404. Existing SQLite records are retained for a future migration, and its
+older data APIs remain separate from the PostgreSQL workspace UI.
+
+Workspace details use compact icons with accessible names and hover labels. Quick Add
+lives in the workspace header for Student, Class / event and Schedule actions. The
+Switch workspace dropdown sits at the top right and lists the signed-in user's active
+workspace memberships by name. Selecting an option opens that workspace; backend access
+checks still apply. The profile icon returns to the main account dashboard. Mobile
+layouts retain 44px action targets and a readable native selector. Save, update,
+delete and other data-changing actions show a blur-backed saving overlay until the
+backend operation and follow-up refresh finish.
 
 ### Current MVP limitations
 
 - Signup still shows the coming-soon notice. Password/OTP, Apple/Facebook and account
   linking remain future work, as requested.
 - Invitations are shareable links; the app does not send email invitations yet.
-- Schedule is an occurrence list, not a drag-and-drop calendar. Recurrence generation
-  and bulk editing are not implemented. Schedule each occurrence explicitly.
+- Schedule is an occurrence list, not a drag-and-drop calendar. Weekly recurrence
+  generation is available; bulk edit/cancel for a whole series is still future work.
 - Program teacher edits change defaults for new sessions; existing session assignments
   remain historical snapshots. UI scheduling inherits defaults; the API also accepts
   per-session teacher, delivery and capacity overrides.
@@ -179,7 +213,9 @@ records are automatically assigned or copied into a new business.
 | `app/auth/database.py` | Lazy PostgreSQL connection from DB variables |
 | `app/auth/repository.py` | Google identity resolution, users and revocable sessions |
 | `app/auth/dependencies.py` | Session/status checks and CSRF validation |
-| `app/routes/dashboard.py` | Workspace selection, onboarding and invitation pages |
+| `app/routes/dashboard.py` | Account dashboard, explicit workspace selection, onboarding and invitation pages |
+| `app/workspaces/services/overview.py` | Owner-only aggregates and assigned-class account projection |
+| `app/templates/account_dashboard.html`, `app/static/account-dashboard.*` | Portfolio cards, rankings, staff landing and shared account navigation |
 | `app/workspaces/routes/` | Typed HTTP endpoints for organizations, catalog and sessions |
 | `app/workspaces/schemas.py` | Validated request payloads |
 | `app/workspaces/access.py` | Active membership, roles, assignments and workspace write lock |
@@ -191,7 +227,7 @@ records are automatically assigned or copied into a new business.
 | `app/workspaces/services/queries.py` | Permission-filtered dashboard projection |
 | `app/static/workspaces/` | Separate API, forms, actions, rendering and startup JS modules |
 | `setup/apply_migration.py` | Atomic versioned migration with checksum journal |
-| `app/routes/legacy_dashboard.py`, `app/routes/teaching.py` | Previous SQLite dashboard and APIs |
+| `app/routes/teaching.py` | Retained SQLite data APIs; previous dashboard removed |
 | `app/services/ownership.py` | Map authenticated UUIDs to private teacher workspaces |
 | `app/services/serializers.py` | API response serialization |
 | `app/models.py`, `app/database.py` | Existing SQLAlchemy teaching data in SQLite |
@@ -230,7 +266,7 @@ The browser holds an opaque session token inside a signed cookie; PostgreSQL sto
 only its SHA-256 hash and expiry (12 hours). Every protected request rechecks ACTIVE
 status. Logout deletes the server session, so replaying an old cookie cannot log in.
 Teaching API mutations require `X-CSRF-Token` from the dashboard's `csrf-token` meta
-field. Logout uses a hidden form token. Protected responses have `Cache-Control: no-store`.
+field. Logout uses a hidden form token. Protected responses have `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`; workspace fetch calls also use `cache: "no-store"`.
 
 ## Deploy on Render
 
@@ -255,15 +291,21 @@ is required. The request host and trusted proxy scheme determine the callback.
 Proxy headers are trusted by the launcher only when `RENDER=true`; do not set
 that flag locally. PostgreSQL must be initialized before login can succeed.
 
-Apply the authentication schema on a fresh database, then apply the workspace
-migration before releasing this dashboard:
+Apply the authentication schema on a fresh database (the baseline auth DDL gains
+`user_type` through migration 002), then apply all workspace
+migrations in order before releasing this dashboard:
 
 ```bash
 python setup/apply_migration.py 001_workspaces_and_teaching.sql
+python setup/apply_migration.py 002_account_types_and_single_owner.sql
+python setup/apply_migration.py 003_owner_staff_separation.sql
+python setup/apply_migration.py 004_recurring_session_series.sql
+python setup/apply_migration.py 005_workspace_type_role_policy.sql
+python setup/apply_migration.py 006_direct_scheduled_participants.sql
 ```
 
 Run against the intended DB credentials from `.env` locally or Render Environment.
-The configured project database was migrated on 2026-09-10. If Render uses that same
+The configured project database needs migrations through 006. If Render uses that same
 database, do not manually rerun the SQL: the runner safely verifies/skips its journaled
 version. A different Render database needs its own initialization. No DDL runs on startup.
 
@@ -589,10 +631,11 @@ npm install --prefix /tmp/classarit-ui-tools jsdom@30.0.1 mermaid@11.17.2
 CLASSARIT_JS_TOOLS=/tmp/classarit-ui-tools node tests/workspace_ui.mjs
 ```
 
-This checks all seven dashboard sections, nineteen dialogs, request payloads, CSRF,
-error retention, escaping and all nine README diagrams. It does not replace visual
-browser review or a real Google login. The PostgreSQL suite currently has 16 cases,
-including a concurrent last-seat test and rollback when roster capacity fails.
+This checks all seven dashboard sections, twenty dialogs, request payloads, CSRF,
+error retention, escaping and all README diagrams. It does not replace visual
+browser review or a real Google login. The PostgreSQL suite currently has 27 cases,
+including owner rankings, teacher-only views, APPOWNER exclusivity, single-owner constraints,
+backward-compatible migration rollout, concurrent last-seat booking and roster rollback.
 
 Google responses are mocked or locally signed for tests; a real Google consent flow
 requires the configured OAuth client and a user completing Google's login screen.
@@ -631,9 +674,10 @@ flowchart TD
     Memberships --> HasWorkspace{Workspace available?}
     HasWorkspace -->|No| Setup[Choose individual practice or institute and name]
     Setup --> Create[Create workspace, owner membership and teacher role atomically]
-    HasWorkspace -->|Yes| Select[Open last workspace or select another]
+    HasWorkspace -->|Yes| Select[Show all owned workspaces or assigned classes]
     Create --> Dashboard[Workspace dashboard]
-    Select --> Dashboard
+    Select --> Manage[Select workspace gear or View my classes]
+    Manage --> Dashboard
     Dashboard --> Gate[Authorize action using workspace membership and role]
     Gate --> Staff[Invite teachers, coaches, admins or operators]
     Staff --> Accept[Accept invitation with verified account ownership]
@@ -674,6 +718,7 @@ permissions and visible data; it does not change the person's account.
 ```mermaid
 erDiagram
     APP_USERS ||--o{ WORKSPACE_MEMBERSHIPS : joins
+    APP_USERS ||--o{ WORKSPACES : sole_subscription_owner
     WORKSPACES ||--o{ WORKSPACE_MEMBERSHIPS : contains
     WORKSPACE_MEMBERSHIPS ||--o{ MEMBERSHIP_ROLES : holds
     WORKSPACES ||--o{ WORKSPACE_INVITATIONS : invites
@@ -731,19 +776,31 @@ application check.
 
 | Role | Implemented permissions |
 | --- | --- |
-| Owner | Workspace management and ownership role changes; closure is future work |
-| Admin | Staff, class/program, student and operational management |
-| Operator | Scheduling, enrollment, attendance and operational records; no staff-role or ownership changes |
+| OWNER | One subscription owner per workspace; can manage the workspace and may also teach |
+| Admin | Institute staff management, class/program, student and operational management; future payment activities; cannot become OWNER through member editing |
+| Operator | Daily operations: classes, schedules, enrollments, attendance, students, venues and makeups; no staff-role, ownership or policy changes |
 | Teacher / Coach | Assigned classes/sessions and relevant participants, attendance and attendance notes |
 
-Members can hold multiple roles. An individual practice starts with Owner + Teacher.
-Invitations cannot grant Owner in this initial model; ownership transfer uses a
-separate authorized transaction. Removing/suspending the final active owner must
-be prohibited, with the workspace row locked to prevent concurrent removals.
+Members can hold multiple operational roles. An individual practice starts with OWNER
+and TEACHER, and keeps Teacher as the only operational staff role. An institute can
+use Admin, Operator and Teacher for staff. Each workspace has exactly one active OWNER, matching `owner_user_id`.
+Neither invitations nor member edits can add a second owner. The owner cannot be
+removed, suspended or replaced using general member administration; the staff screen
+only edits Admin, Operator and Teacher. A subscription-aware ownership transfer
+workflow is future work; it does not exist in this release.
+
+An account cannot mix subscription ownership with active staff membership in another
+workspace. If a teacher, operator or admin wants to start their own business with the
+same email, their current owner/admin must first deactivate that staff membership.
+This keeps payment responsibility, future subscription billing and staff management
+clear for both businesses.
 
 Database constraints enforce:
 
 - One membership per workspace/user and unique role assignments.
+- Exactly one active owner matching `workspaces.owner_user_id`; APPOWNER cannot be a workspace member.
+- Individual practices cannot use Admin/Operator roles or invitations, and their owner must remain a Teacher.
+- OWNER accounts cannot also keep active non-owner staff memberships; migration 003 enforces this separation.
 - Same-workspace links for staff, activities, venues, students, classes and make-ups.
 - A venue space belongs to the selected venue, not merely the same workspace.
 - At most one current ACTIVE/PAUSED enrollment per student/program.
@@ -848,7 +905,7 @@ rollback before switching production API reads/writes. Pause writes during the f
 migration rather than allowing SQLite and PostgreSQL copies to drift.
 
 The DDL supports the implemented teaching workflow. Payments,
-materials, recurrence rules, branch administration and audit logs need their own
+materials, advanced recurrence rules, branch administration and audit logs need their own
 reviewed migrations; their old SQLite tables are not replaced by this script.
 
 Implemented API route shape: `/api/workspaces/{workspace_id}/...`, with membership checks in
@@ -860,8 +917,9 @@ resource IDs inside a transaction.
 
 - First-time setup asks only individual/institute and a name; suggest a name for an
   individual practice rather than requiring business details.
-- Open the only workspace automatically. Show a switcher once more than one exists
-  and remember the last workspace used.
+- After login, send users with exactly one active workspace directly into that
+  workspace. Users with multiple workspaces see the account overview first;
+  `/dashboard?overview=1` always opens the account overview for creating or comparing workspaces.
 - Default an individual owner as the teacher/coach; do not ask them to pick roles.
 - Create activities, students and venues inline instead of forcing navigation away
   from the class/session form.
@@ -887,7 +945,7 @@ invalid input. `/docs` includes the complete typed request models.
 
 After Google login, name a workspace and choose Individual or Institute. The account
 can create more businesses using **Add a workspace**. Choose **Team → Invite member**,
-select roles, then copy the private link displayed above the page and share it with
+select Admin, Operator and/or Teacher roles, then copy the private link displayed above the page and share it with
 the intended person. No email is sent automatically. Invitations expire after seven
 days; only their SHA-256 hashes are stored. The acceptance screen supports **Not now**. Signed-out visitors see a login prompt;
 the invitation is preserved when Google login rotates the session, then reopened
@@ -922,12 +980,12 @@ sequenceDiagram
 | Action | Endpoint |
 | --- | --- |
 | List/create workspaces | `GET/POST /api/workspaces` |
-| Dashboard data | `GET /snapshot` |
+| Account overview / workspace data | `GET /api/dashboard/overview`, `GET /section/{tab}` for workspace tabs; `GET /snapshot` remains compatibility/debug data |
 | Invite / revoke | `POST /invitations`, `DELETE /invitations/{id}` |
 | Accept / dismiss pending invitation | `POST /api/invitations/{token}/accept`, `POST /api/invitations/dismiss` |
 | Change member roles/status | `PATCH /members/{id}` |
 
-Owner/Admin manage the team; only Owner can change ownership roles. Teacher-only
+Owner/Admin manage the team; OWNER itself cannot be added or removed through member edits. Teacher-only
 members cannot create students, classes, venues, invitations or makeup credits.
 They can mark attendance/complete their assigned sessions. Operator can manage
 teaching operations but cannot change staff roles or policy. All writes within a
@@ -974,11 +1032,29 @@ flowchart TD
 ### 3. Schedule, delivery, rescheduling and attendance
 
 **Schedule** asks for the class and start time; duration, staff, capacity and location
-inherit program defaults. An optional end time overrides duration. API clients can
-also override teachers, capacity and delivery at creation. Times without offsets are
-interpreted in the workspace's IANA timezone, then stored as UTC instants. Ambiguous
-or nonexistent daylight-saving times require an explicit offset or a different time.
-All displayed schedule times use the workspace timezone, not the browser timezone.
+inherit program defaults. An optional end time overrides duration for one occurrence.
+The same dialog can switch to **Repeat weekly**, where managers choose one or more
+weekdays, a local start time and a duration in months. The backend stores a recurring
+series record and generates ordinary session rows for each selected day, so each
+occurrence can later be edited, cancelled, attendance-marked or shown on the calendar
+independently. The Schedule & attendance page renders each recurring series as one
+row using the recurring-series parent record. If one generated occurrence is
+rescheduled or cancelled, it is marked `edited_from_series`, its title receives
+` - Edited`, and it appears under Custom changes from recurring schedules. Disabling
+a recurring schedule archives that parent row and cancels future standard occurrences
+so those days become free on the calendar; custom edited dates stay scheduled as
+independent exceptions. API clients can also override teachers, capacity and delivery
+at creation. Times without offsets are interpreted in
+the workspace's IANA timezone, then stored as UTC instants. Ambiguous or nonexistent
+daylight-saving times require an explicit offset or a different time. All displayed
+schedule times use the workspace timezone, not the browser timezone.
+
+Recurring generation is atomic. If any generated occurrence has a teacher, student,
+venue, space or capacity conflict, the whole repeat request is rejected and no partial
+sessions are kept. A single repeat request is limited to 200 generated sessions. This
+release stores generated sessions plus a recurring-series parent record for grouping.
+Whole-series disable is available for future standard occurrences; bulk edit of a
+series pattern remains future work.
 
 **Reschedule** changes a future occurrence and its location without deleting the
 roster. Conflicts are rechecked. Online uses a meeting URL, in-person uses a venue,
@@ -1011,7 +1087,7 @@ flowchart TD
 
 | Action | Endpoint |
 | --- | --- |
-| Schedule / reschedule | `POST /sessions`, `PATCH /sessions/{id}` |
+| Schedule / repeat / reschedule | `POST /sessions`, `POST /sessions/recurring`, `PATCH /sessions/{id}` |
 | Cancel with optional roster makeup credits | `POST /sessions/{id}/cancel` |
 | Mark attendance / complete | `PUT /participants/{id}/attendance`, `POST /sessions/{id}/complete` |
 
@@ -1089,3 +1165,225 @@ installed/enabled. They are README documentation, so no Mermaid JavaScript depen
 is needed in the FastAPI application. If the preview cannot render them, enable the
 Mermaid plugin in IntelliJ and reopen the Markdown preview; the surrounding prose
 and tables contain the same workflows.
+
+## Owner dashboard and account types
+
+The default `/dashboard` opens the only active workspace directly when an account
+has exactly one workspace. Accounts with multiple workspaces see the account
+overview first, and `/dashboard?overview=1` always opens that overview. Account
+identity, business ownership and operational permissions are separate concepts:
+
+| Account type | Purpose and entry view | Restrictions |
+| --- | --- | --- |
+| `OWNER` | Portfolio of all owned workspaces, student/class counts and rankings; can also teach or perform administration inside owned workspaces | Each workspace has one subscription owner; an owner can own several workspaces, but cannot also be active staff in another owner's workspace |
+| `MEMBER` | Invited staff see assigned classes; Admin/Operator memberships retain their permitted workspace management | Teacher-only members see assigned class and session details, not company analytics, team administration or the legacy dashboard. Active staff must be deactivated before the same email can become an OWNER. |
+| `APPOWNER` | Dedicated Classarit product-performance account | Exclusive: no workspace ownership, memberships or operational roles; performance UI is reserved for a later release |
+
+New Google accounts start as MEMBER. Creating their first workspace atomically changes
+the account to OWNER and creates its OWNER + TEACHER membership. An active invited
+staff account cannot create an independent business through the workspace creation
+API. The current workspace owner or admin must first deactivate that staff membership
+by setting it to `SUSPENDED` or `LEFT`; after deactivation, the same email can create
+a business and becomes OWNER. OWNER accounts can create additional owned businesses,
+but should use a separate email if they also need staff access inside another owner's
+workspace.
+
+`workspaces.owner_user_id` is the future subscription payer reference. Monthly
+subscription charging, salary allocation, payroll and ownership transfer are **not
+implemented**. One owner account may pay for multiple owned workspaces in the later
+billing model; pricing and subscription grouping remain to be designed. Member-role
+editing never changes this payer reference or grants/removes OWNER. It can only edit
+Admin, Operator and Teacher access.
+
+APPOWNER is not selectable through Google claims, workspace signup, invitations or
+member edits. No existing account is automatically promoted to APPOWNER. It will use
+a dedicated email/account when product analytics is built. The existing unique
+`user_emails.email` constraint prevents that email belonging to another business
+account. Database triggers reject APPOWNER memberships, promotion of users with
+business membership history, and conversion of APPOWNER into a business account.
+Current APPOWNER access shows only a coming-later product-performance page; business
+APIs and the legacy data routes reject it. There are no product metrics yet.
+
+### Owner portfolio metrics
+
+Each owned workspace has a **gear beside its title** to manage it and two independent rankings:
+
+- **Classes attracting the most students:** distinct active students with a currently
+  eligible ACTIVE course enrollment, plus distinct students BOOKED into upcoming
+  SCHEDULED event sessions. Enrollment dates use the workspace timezone. A student
+  is counted once per class even if several event sessions are booked. Cancelled
+  bookings, ended enrollments and archived students do not contribute. Only ACTIVE
+  programs appear in this ranking. This is current demand, not a measured acquisition
+  or conversion rate.
+- **Most used classes:** number of COMPLETED occurrences ending within the previous
+  rolling 30 days, using UTC instants. Scheduled and cancelled sessions do not count.
+  Historical completed usage can include a program since archived.
+- **Active student records:** active student rows in each workspace, including those
+  not yet enrolled. Portfolio totals add workspace counts; people are not merged
+  across independent businesses. Class student counts must not be summed to infer
+  unique people because one student can attend several classes.
+- **Active teachers:** distinct accounts with ACTIVE status and an ACTIVE membership
+  carrying the TEACHER role in an active owned workspace. An owner with that role
+  counts as a teacher. The portfolio counts each person once across businesses;
+  individual workspace counts can therefore add up to more than the portfolio total.
+  Pending invitations, suspended memberships and blocked accounts do not count.
+
+Only workspaces whose `owner_user_id` matches the signed-in account contribute to
+owner totals and rankings. Membership in someone else's workspace does not reveal
+that company's analytics. Staff with a teacher-only role see only their program or
+session assignments. The account overview uses `overview.py`; the existing workspace
+projection remains in `queries.py` with teacher filtering on both reads and writes.
+
+### Navigation and account separation
+
+```mermaid
+flowchart TD
+    Login[Google login] --> Account{Account type}
+    Account -->|APPOWNER| Product[Product performance placeholder]
+    Product --> Exclusive[No business workspaces or roles]
+    Account -->|OWNER| Main[All owned workspaces dashboard]
+    Main --> Stats[Student counts and class rankings per workspace]
+    Stats --> Manage[Workspace gear]
+    Account -->|MEMBER| Staff[Assigned classes across invited teams]
+    Staff --> View[View my classes]
+    Manage --> Workspace[Selected workspace management]
+    View --> Teacher[Assigned class and session details]
+    Workspace --> Switch[Header workspace selector or user icon]
+    Teacher --> Switch
+    Switch --> MainRoute[Main dashboard with account-specific view]
+    MainRoute --> Account
+```
+
+`/workspaces/{workspace_id}` is the explicit detail page. Old
+`/dashboard?workspace={uuid}` links redirect there, and `/dashboard` redirects there
+when exactly one active workspace is available. The top-left user icon links to
+`/dashboard?overview=1` so a single-workspace owner can still reach the account
+overview and create another workspace. Invitations still return to their acceptance
+page after Google login; accepting opens the invited workspace, and the header
+selector switches directly between active workspaces.
+
+### Migration 002 and rollout
+
+**Applied to the configured database:** both existing workspace owners were preserved.
+No APPOWNER account was created or assigned.
+
+Run [002_account_types_and_single_owner.sql](setup/migrations/002_account_types_and_single_owner.sql)
+with the versioned runner after migration 001:
+
+```bash
+python setup/apply_migration.py 002_account_types_and_single_owner.sql
+```
+
+The migration checks that existing workspaces have exactly one active OWNER. If any
+workspace has zero, multiple or suspended owners, the whole migration stops without
+choosing a payer automatically. Resolve those records explicitly before retrying.
+For valid records it backfills `owner_user_id` from the existing owner membership and
+sets those users to OWNER; other users become MEMBER. It does not add subscription
+charges, salary records or any APPOWNER account.
+
+A partial unique index prevents a second OWNER role. Deferred constraint triggers
+ensure the designated owner retains an active matching membership at transaction
+commit. Other triggers enforce account-type separation and prevent general ownership
+replacement. These constraints complement API authorization; they are not database
+row-level security.
+
+During rollout, migration 002 supports the previous deployed app's workspace inserts
+by deriving a missing `owner_user_id` from `created_by` and promoting an eligible new
+account to OWNER. Apply the migration before deploying the new code. Applied scripts
+remain immutable; use a new migration for further changes.
+
+Run [003_owner_staff_separation.sql](setup/migrations/003_owner_staff_separation.sql)
+after migration 002:
+
+```bash
+python setup/apply_migration.py 003_owner_staff_separation.sql
+```
+
+Migration 003 prevents an account from being both a subscription OWNER and active
+staff in another owner's workspace. A deactivated staff record (`SUSPENDED` or `LEFT`)
+does not block later ownership.
+
+Run [004_recurring_session_series.sql](setup/migrations/004_recurring_session_series.sql)
+after migration 003:
+
+```bash
+python setup/apply_migration.py 004_recurring_session_series.sql
+```
+
+Migration 004 adds recurring-series metadata and edited-occurrence fields to class
+sessions. It is additive and does not move existing one-time sessions into a series.
+
+Run [005_workspace_type_role_policy.sql](setup/migrations/005_workspace_type_role_policy.sql)
+after migration 004:
+
+```bash
+python setup/apply_migration.py 005_workspace_type_role_policy.sql
+```
+
+Migration 005 enforces workspace-type role rules: individual practices keep the
+owner as OWNER + TEACHER and allow Teacher-only staff, while institutes may use
+Admin, Operator and Teacher roles.
+
+Run [006_direct_scheduled_participants.sql](setup/migrations/006_direct_scheduled_participants.sql)
+after migration 005:
+
+```bash
+python setup/apply_migration.py 006_direct_scheduled_participants.sql
+```
+
+Migration 006 lets schedules store directly selected students as `DIRECT`
+participants without creating a long-running enrollment. Events still use `EVENT`;
+ongoing course enrollments still use `ENROLLMENT`.
+
+### Responsive layout and browser verification
+
+The owner overview uses compact metric cards and workspace cards, with one Create
+workspace action in the header. The gear beside each workspace title opens its
+management page. Short labels and tooltips replace explanatory paragraphs; Top
+classes and Most used retain the ranking definitions above.
+
+Shared `app/static/responsive.css` and `responsive.js` adapt public pages, login,
+invitations, onboarding, account dashboards and workspace management for desktop
+and mobile browsers. On small screens navigation collapses into a Menu button,
+cards stack, tables scroll within their containers and dialogs fit the viewport.
+Mobile controls retain touch targets and form inputs use readable text sizes.
+
+The browser regression check renders synthetic data without starting the app or
+connecting to a database. With Node, Playwright and Google Chrome installed:
+
+```bash
+.venv/bin/python tests/responsive_fixtures.py /tmp/classarit-responsive
+node tests/responsive_browser.mjs
+```
+
+If Playwright is installed outside this project, set
+`CLASSARIT_PLAYWRIGHT_PACKAGE` to its absolute `playwright/package.json` path.
+The check covers eight pages at widths 320, 390, 768, 1024, 1440 and 1920 pixels,
+including page overflow, mobile navigation, workspace sections, a class creation
+dialog and mobile gear touch targets. Desktop and phone screenshots are written
+to `/tmp/classarit-responsive`. This complements the PostgreSQL integration suite;
+it does not exercise real Google consent or prove compatibility with every browser.
+
+### Monthly workspace calendar
+
+The workspace left navigation loads fresh data per tab through `GET /section/{tab}`
+instead of keeping one large single-page snapshot in memory. The Calendar tab shows
+the current-month calendar in the workspace timezone. Opening Calendar and using
+Previous, Next or Current month calls the workspace API for that month and moves
+the view without reloading the page. Metrics moved to the owner-only Reporting tab.
+Quick Add sits in the page header between the workspace name and the right-aligned
+Switch workspace selector.
+
+SCHEDULED and COMPLETED sessions contribute to the calendar. Free days are light green,
+days with one to four active sessions are orange, and days with five or more are red.
+Orange time slots show the first two sessions; a count indicates additional
+sessions. Today has a blue border. Clicking a day opens a div-based schedule panel
+with the full list of classes.
+Managers can add a one-time or repeating schedule from that date, edit a future
+schedule or cancel it from the calendar; teacher-only users get the read-only schedule list.
+Past days remain visible as gray cells and are clickable for viewing completed or
+scheduled history. Past days do not expose schedule-management actions.
+Sessions spanning midnight appear on each occupied day; an exact midnight end
+does not occupy the following day. Free means no scheduled classes, not a
+configured working-hours availability guarantee. The calendar API uses the existing
+workspace authorization; recurring-series grouping needs migration 004.

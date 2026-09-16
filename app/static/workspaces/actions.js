@@ -1,13 +1,20 @@
-import { api, notice } from "./api.js";
-import { edit, field as f } from "./forms.js";
-export function action(s, key, id, refresh) {
+import { api, notice } from "./api.js?v=workspace-reporting-20260915";
+import { edit, field as f } from "./forms.js?v=workspace-reporting-20260915";
+export function action(s, key, id, refresh, context = {}) {
   const opts = (values) =>
     values.map((v) => ({ id: v, name: v.replaceAll("_", " ") }));
+  const staffRoleValues =
+    s.workspace?.workspace_type === "INDIVIDUAL"
+      ? ["TEACHER"]
+      : ["ADMIN", "OPERATOR", "TEACHER"];
   const select = (n, l, options, value = "", required = true) =>
     f(n, l, "select", { options, value, required });
   const teachers = s.members
     .filter((m) => m.status === "ACTIVE" && m.roles.includes("TEACHER"))
     .map((m) => ({ id: m.id, name: m.full_name }));
+  const students = s.students
+    .filter((student) => student.status !== "ARCHIVED")
+    .map((student) => ({ id: student.id, name: student.full_name }));
   const locationFields = (prefix = "", values = {}) => [
     select(
       prefix + "delivery_mode",
@@ -84,6 +91,27 @@ export function action(s, key, id, refresh) {
     }).format(new Date(t));
     return parts.replace(" ", "T");
   };
+  const defaultSessionStart = () => {
+    if (!context.dateKey) return "";
+    return context.dateKey === today
+      ? local(new Date(Date.now() + 60 * 60 * 1000))
+      : `${context.dateKey}T09:00`;
+  };
+  const weekdayOptions = [
+    ["MON", "Mon"],
+    ["TUE", "Tue"],
+    ["WED", "Wed"],
+    ["THU", "Thu"],
+    ["FRI", "Fri"],
+    ["SAT", "Sat"],
+    ["SUN", "Sun"],
+  ].map(([id, name]) => ({ id, name }));
+  const weekdayForDate = (dateKey) =>
+    ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][
+      new Date(`${dateKey}T12:00:00`).getDay()
+    ];
+  const selectedProgram = (programId) =>
+    s.programs.find((p) => p.id === programId) || s.programs[0] || {};
   if (key === "student" || key === "edit-student") {
     const st = s.students.find((x) => x.id === id) || {};
     const g =
@@ -211,24 +239,130 @@ export function action(s, key, id, refresh) {
       ],
       save(`/programs/${id}/enrollments`),
     );
-  if (key === "session")
+  if (key === "session") {
+    const program = selectedProgram(id);
+    const startDate =
+      context.dateKey || local(new Date(Date.now() + 24 * 60 * 60 * 1000)).slice(0, 10);
+    const startTime =
+      context.dateKey === today
+        ? local(new Date(Date.now() + 60 * 60 * 1000)).slice(11, 16)
+        : "09:00";
+    const weekly = { field: "schedule_type", values: ["weekly"] };
+    const once = { field: "schedule_type", values: ["once"] };
     edit(
-      "Schedule session",
+      "Schedule classes",
       [
+        select(
+          "schedule_type",
+          "Schedule",
+          [
+            { id: "once", name: "One class" },
+            { id: "weekly", name: "Repeat weekly" },
+          ],
+          "once",
+        ),
         select(
           "program_id",
           "Class or event",
           s.programs,
           id || s.programs[0]?.id,
         ),
+        students.length
+          ? f("student_ids", "Students for this schedule (optional)", "multiple", {
+              options: students,
+              value: [],
+              help: "Enrolled students are added automatically. Pick extra students here for this one class or every generated repeat.",
+            })
+          : f(
+              "student_note",
+              "No students yet. You can save the schedule now and add students later from the Students tab.",
+              "note",
+            ),
+        f("capacity", "Seats for this schedule", "number", {
+          value: program.capacity || 1,
+          min: 1,
+          max: 10000,
+          help: "Must cover enrolled students plus any selected students. For example, choose 2 seats when two students should attend.",
+        }),
         f("title", "Session title (optional)"),
         f("starts_at", `Start (${s.workspace.timezone})`, "datetime-local", {
+          value: defaultSessionStart(),
           required: true,
+          visibleWhen: once,
         }),
-        f("ends_at", "End (optional; uses class duration)", "datetime-local"),
-      ],
-      save("/sessions"),
+        f("ends_at", "End (optional; uses class duration)", "datetime-local", {
+          visibleWhen: once,
+        }),
+        f("start_date", "First week starts", "date", {
+          value: startDate,
+          required: true,
+          visibleWhen: weekly,
+          help: "The selected weekdays are generated from this date forward.",
+        }),
+        f("start_time", `Start time (${s.workspace.timezone})`, "time", {
+          value: startTime,
+          required: true,
+          visibleWhen: weekly,
+        }),
+        f("duration_minutes", "Duration in minutes", "number", {
+          value: program.default_duration_minutes || 60,
+          min: 1,
+          max: 1440,
+          visibleWhen: weekly,
+          help: "Leave the class default if this repeat follows the usual duration.",
+        }),
+        f("repeat_weekdays", "Repeat on", "weekday-multiple", {
+          options: weekdayOptions,
+          value: [weekdayForDate(startDate)],
+          required: true,
+          visibleWhen: weekly,
+          help: "Pick one or more days. Example: Mon + Thu for twice a week.",
+        }),
+        select(
+          "repeat_months",
+          "Repeat for",
+          [
+            { id: "1", name: "1 month" },
+            { id: "2", name: "2 months" },
+            { id: "3", name: "3 months" },
+            { id: "6", name: "6 months" },
+            { id: "12", name: "12 months" },
+          ],
+          "3",
+        ),
+      ].map((field) =>
+        field.name === "repeat_months" ? { ...field, visibleWhen: weekly } : field,
+      ),
+      async (data) => {
+        if (data.schedule_type === "weekly") {
+          const result = await api("/sessions/recurring", "POST", {
+            program_id: data.program_id,
+            title: data.title,
+            student_ids: data.student_ids || [],
+            start_date: data.start_date,
+            start_time: data.start_time,
+            duration_minutes: data.duration_minutes,
+            capacity: data.capacity,
+            repeat_weekdays: data.repeat_weekdays,
+            repeat_months: Number(data.repeat_months),
+          });
+          await refresh();
+          notice(`Scheduled ${result.count} classes.`);
+          return;
+        }
+        await api("/sessions", "POST", {
+          program_id: data.program_id,
+          title: data.title,
+          student_ids: data.student_ids || [],
+          starts_at: data.starts_at,
+          ends_at: data.ends_at,
+          capacity: data.capacity,
+        });
+        await refresh();
+        notice("Saved successfully.");
+      },
     );
+  }
   if (key === "reschedule") {
     const ss = s.sessions.find((x) => x.id === id);
     edit(
@@ -352,9 +486,13 @@ export function action(s, key, id, refresh) {
       [
         f("email", "Their Google email", "email", { required: true }),
         f("roles", "Roles", "multiple", {
-          options: opts(["ADMIN", "OPERATOR", "TEACHER"]),
+          options: opts(staffRoleValues),
           value: ["TEACHER"],
           required: true,
+          help:
+            s.workspace?.workspace_type === "INDIVIDUAL"
+              ? "Individual practices can invite teachers only."
+              : "Institutes can invite Admin, Operator or Teacher roles.",
         }),
       ],
       async (d) => {
@@ -367,13 +505,23 @@ export function action(s, key, id, refresh) {
     );
   if (key === "member") {
     const m = s.members.find((m) => m.id === id);
+    const operationalRoles = m.roles.filter(
+      (role) => role !== "OWNER" && staffRoleValues.includes(role),
+    );
     edit(
       `Manage ${m.full_name}`,
       [
-        f("roles", "Roles", "multiple", {
-          options: opts(["OWNER", "ADMIN", "OPERATOR", "TEACHER"]),
-          value: m.roles,
-          required: true,
+        f("roles", m.roles.includes("OWNER") ? "Operational roles" : "Roles", "multiple", {
+          options: opts(staffRoleValues),
+          value: operationalRoles,
+          required: !m.roles.includes("OWNER"),
+          help: m.roles.includes("OWNER")
+            ? s.workspace?.workspace_type === "INDIVIDUAL"
+              ? "Individual owner status is fixed, and the owner must remain a Teacher."
+              : "Owner status is fixed here. Admin, Operator or Teacher access can be changed."
+            : s.workspace?.workspace_type === "INDIVIDUAL"
+              ? "Individual practices use Teacher for staff access."
+              : "Choose at least one staff role.",
         }),
         select(
           "status",
@@ -422,21 +570,67 @@ export function action(s, key, id, refresh) {
       ],
       save("/makeup-policy", "PUT"),
     );
-  if (["revoke", "release", "complete"].includes(key)) {
+  if (key === "edit-series") {
+    const series = s.recurring_series.find((r) => r.id === id);
+    if (!series) return notice("Recurring schedule was not found.", true);
+    const related = s.sessions
+      .filter((ss) => ss.recurring_series_id === id)
+      .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    const futureCount = related.filter(
+      (ss) => ss.status === "SCHEDULED" && new Date(ss.starts_at) > new Date(),
+    ).length;
+    const programName =
+      s.programs.find((p) => p.id === series.program_id)?.name || "Class";
+    const scheduleLine = `${(series.repeat_weekdays || []).join(" + ") || "Weekly"} · ${series.repeat_months || 0} month(s) · ${futureCount} session(s) left`;
+    edit(
+      "Edit recurring schedule",
+      [
+        f("class_name", `Class: ${programName}`, "note"),
+        f("schedule", `Recurring: ${scheduleLine}`, "note"),
+        f("title", "Schedule title", "text", {
+          value: series.title || programName,
+          required: true,
+        }),
+        f(
+          "help",
+          "This updates the recurring series title and future standard sessions. To change one date, use the calendar. Pattern editing will be added separately.",
+          "note",
+        ),
+      ],
+      save(`/recurring-series/${id}`, "PATCH"),
+    );
+  }
+  if (["revoke", "release", "complete", "disable-series", "restore-series"].includes(key)) {
     const path =
       key === "revoke"
         ? `/invitations/${id}`
         : key === "release"
           ? `/makeup-bookings/${id}`
-          : `/sessions/${id}/complete`;
+          : key === "disable-series"
+            ? `/recurring-series/${id}/disable`
+            : key === "restore-series"
+              ? `/recurring-series/${id}/restore`
+              : `/sessions/${id}/complete`;
     edit(
       key === "revoke"
         ? "Revoke invitation"
         : key === "release"
           ? "Release replacement booking"
-          : "Complete session",
-      [],
-      save(path, key === "complete" ? "POST" : "DELETE"),
+          : key === "disable-series"
+            ? "Disable recurring schedule"
+            : key === "restore-series"
+              ? "Restore recurring schedule"
+              : "Complete session",
+      key === "disable-series"
+        ? [
+            f("confirm", "Future standard occurrences will be cancelled. Custom edited dates stay on the calendar.", "note"),
+          ]
+        : key === "restore-series"
+          ? [
+              f("confirm", "Future standard occurrences cancelled by this recurring schedule will become scheduled again.", "note"),
+            ]
+          : [],
+      save(path, key === "complete" || key === "disable-series" || key === "restore-series" ? "POST" : "DELETE"),
     );
   }
 }

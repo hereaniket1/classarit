@@ -85,12 +85,12 @@ def session_user(token):
         return None
     s = schema_name()
     with auth_engine().connect() as conn:
-        row = conn.execute(text(f'''SELECT u.id,u.full_name,u.avatar_url,e.email
+        row = conn.execute(text(f'''SELECT u.id,u.full_name,u.avatar_url,u.user_type,u.default_workspace_id,e.email
             FROM {s}.auth_sessions a JOIN {s}.app_users u ON u.id=a.app_user_id
             LEFT JOIN {s}.user_emails e ON e.app_user_id=u.id AND e.is_primary=true
             WHERE a.token_hash=:hash AND a.expires_at>CURRENT_TIMESTAMP AND u.status='ACTIVE' '''),
             {"hash": digest(token)}).mappings().first()
-        return dict(row, id=str(row['id'])) if row else None
+        return dict(row, id=str(row['id']), default_workspace_id=str(row['default_workspace_id']) if row['default_workspace_id'] else None) if row else None
 
 
 def revoke_session(token):

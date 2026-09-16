@@ -15,9 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 from workspace_cases import WorkspaceCases
+from owner_cases import OwnerCases
 
 
-class LoginTests(WorkspaceCases, unittest.TestCase):
+class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix='classarit-tests-',dir='/tmp')
@@ -37,8 +38,9 @@ class LoginTests(WorkspaceCases, unittest.TestCase):
         # Match hosted installations where citext already lives in public.
         subprocess.run(cmd+['-c','CREATE EXTENSION citext WITH SCHEMA public'],check=True,stdout=subprocess.DEVNULL)
         subprocess.run(cmd+['-f',str(ROOT/'setup/auth_schema.sql')],check=True,stdout=subprocess.DEVNULL)
-        for _ in range(2):
-            subprocess.run([sys.executable,str(ROOT/'setup/apply_migration.py'),'001_workspaces_and_teaching.sql'],check=True,stdout=subprocess.DEVNULL)
+        for migration in ('001_workspaces_and_teaching.sql','002_account_types_and_single_owner.sql','003_owner_staff_separation.sql','004_recurring_session_series.sql','005_workspace_type_role_policy.sql','006_direct_scheduled_participants.sql','007_default_workspace.sql'):
+            for _ in range(2):
+                subprocess.run([sys.executable,str(ROOT/'setup/apply_migration.py'),migration],check=True,stdout=subprocess.DEVNULL)
         from app.main import app
         from fastapi.testclient import TestClient
         cls.app=app; cls.client_type=TestClient
