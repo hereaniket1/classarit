@@ -333,7 +333,7 @@ credential belongs in `.env.example`, source files or the README.
 | `RESEND_API_KEY`, `RESEND_FROM_EMAIL` | Resend email delivery for OTP, invitations and schedule notifications |
 | `OTP_HMAC_SECRET` | HMAC secret for email OTP challenge digests; keep separate from the session secret |
 
-Resend uses an API key, not a client ID. Email delivery is skipped safely when Resend settings are blank.
+Resend uses an API key, not a client ID. `RESEND_FROM_EMAIL` must use a verified Resend sender/domain such as `Classarit <noreply@yourdomain.com>`; placeholder domains like `example.com` are rejected by Resend. Email delivery is skipped safely when Resend settings are blank.
 Missing Google settings leave the landing page available with login disabled.
 A database/provider failure shows a generic login error without exposing secrets.
 

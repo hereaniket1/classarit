@@ -1,5 +1,6 @@
 """Resend email delivery with safe no-op behavior when credentials are absent."""
 
+import json
 import logging
 import os
 from html import escape
@@ -37,11 +38,26 @@ def send_email(to: str | Iterable[str], subject: str, html: str, text: str | Non
         return response.json()
 
 
+def _safe_resend_message(error: httpx.HTTPStatusError):
+    try:
+        data = error.response.json()
+    except json.JSONDecodeError:
+        data = {"message": error.response.text[:300]}
+    # Resend error payloads normally contain name/message/statusCode. Keep only
+    # those fields so logs do not accidentally include headers or request data.
+    message = data.get("message") or data.get("error") or "Resend rejected the request"
+    name = data.get("name") or data.get("type") or "resend_error"
+    return f"status={error.response.status_code} name={name} message={message}"
+
+
 def send_email_safely(*args, **kwargs):
     try:
         return send_email(*args, **kwargs)
+    except httpx.HTTPStatusError as error:
+        logger.warning("Email delivery failed: %s", _safe_resend_message(error))
+        return {"skipped": True, "reason": "delivery_failed", "status_code": error.response.status_code}
     except Exception as error:
-        logger.warning("Email delivery failed: %s", type(error).__name__)
+        logger.warning("Email delivery failed before provider response: %s", type(error).__name__)
         return {"skipped": True, "reason": "delivery_failed"}
 
 
