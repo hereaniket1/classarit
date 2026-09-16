@@ -86,7 +86,7 @@ CREATE TABLE classarit.auth_challenges (
     app_user_id uuid NOT NULL REFERENCES classarit.app_users(id) ON DELETE CASCADE,
     target_email citext NOT NULL,
     purpose text NOT NULL CHECK (purpose IN
-        ('EMAIL_VERIFY', 'PASSWORD_SETUP', 'PASSWORD_RESET', 'LINK_IDENTITY')),
+        ('EMAIL_VERIFY', 'PASSWORD_SETUP', 'PASSWORD_RESET', 'LINK_IDENTITY', 'REGISTRATION_EMAIL_OTP')),
     -- Keyed HMAC of a random code/token, challenge ID, purpose and target.
     -- The HMAC key belongs in server secrets, never in this database.
     secret_digest text NOT NULL CHECK (length(btrim(secret_digest)) > 0),
@@ -118,6 +118,7 @@ CREATE TRIGGER trg_auth_identities_updated_at BEFORE UPDATE ON classarit.auth_id
     FOR EACH ROW EXECUTE FUNCTION classarit.set_updated_at();
 CREATE TRIGGER trg_password_credentials_updated_at BEFORE UPDATE ON classarit.password_credentials
     FOR EACH ROW EXECUTE FUNCTION classarit.set_updated_at();
+
 CREATE TABLE IF NOT EXISTS classarit.auth_sessions (
     token_hash text PRIMARY KEY,
     app_user_id uuid NOT NULL REFERENCES classarit.app_users(id) ON DELETE CASCADE,

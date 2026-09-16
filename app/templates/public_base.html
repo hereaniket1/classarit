@@ -17,14 +17,10 @@
     <a class="public-brand" href="/" aria-label="Classarit home"><span class="brand-mark">C</span><span>Classarit</span></a>
     <nav class="public-nav" aria-label="Main navigation">
       <a class="login-link" href="/login">Log in</a>
-      <button type="button" class="btn btn-primary" data-signup>Sign up</button>
+      <a class="btn btn-primary" href="/login#signup" data-signup>Sign up</a>
     </nav>
   </header>
   {% block content %}{% endblock %}
   <footer class="public-footer">Classarit <span>·</span> The flow of knowledge.</footer>
-  <div class="signup-toast" id="signup-toast" role="status" aria-live="polite" hidden>
-    <div><strong>Signup is coming soon</strong><p>For now, you can continue with Google.</p></div>
-    <button type="button" aria-label="Dismiss notification" data-dismiss-toast>×</button>
-  </div>
 </body>
 </html>

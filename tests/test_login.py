@@ -32,13 +32,14 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
             'DB_USER':os.getenv('USER','aniketpathak'),'DB_PASSWORD':'test','DB_SCHEMA':'classarit','DB_SSLMODE':'disable',
             'GOOGLE_CLIENT_ID':'test-client','GOOGLE_CLIENT_SECRET':'test-secret',
             'GOOGLE_REDIRECT_URI':'http://127.0.0.1:8000/auth/google/callback',
+            'RESEND_API_KEY':'','RESEND_FROM_EMAIL':'','OTP_HMAC_SECRET':'test-otp-secret-with-at-least-32-chars',
             'SESSION_SECRET_KEY':'test-session-secret-with-at-least-32-chars','RENDER':'false'})
         cls.env.start();cls.addClassCleanup(cls.env.stop)
         cmd=['psql','-h',str(cls.root/'socket'),'-p','55441','-d','postgres','-v','ON_ERROR_STOP=1']
         # Match hosted installations where citext already lives in public.
         subprocess.run(cmd+['-c','CREATE EXTENSION citext WITH SCHEMA public'],check=True,stdout=subprocess.DEVNULL)
         subprocess.run(cmd+['-f',str(ROOT/'setup/auth_schema.sql')],check=True,stdout=subprocess.DEVNULL)
-        for migration in ('001_workspaces_and_teaching.sql','002_account_types_and_single_owner.sql','003_owner_staff_separation.sql','004_recurring_session_series.sql','005_workspace_type_role_policy.sql','006_direct_scheduled_participants.sql','007_default_workspace.sql'):
+        for migration in ('001_workspaces_and_teaching.sql','002_account_types_and_single_owner.sql','003_owner_staff_separation.sql','004_recurring_session_series.sql','005_workspace_type_role_policy.sql','006_direct_scheduled_participants.sql','007_default_workspace.sql','008_notifications_otp_executive.sql'):
             for _ in range(2):
                 subprocess.run([sys.executable,str(ROOT/'setup/apply_migration.py'),migration],check=True,stdout=subprocess.DEVNULL)
         from app.main import app
@@ -57,6 +58,8 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         from sqlalchemy import text
         with auth_engine().begin() as conn:
             conn.execute(text('TRUNCATE classarit.app_users CASCADE'))
+            conn.execute(text("UPDATE classarit.app_settings SET value='true', updated_by=NULL"))
+            conn.execute(text('TRUNCATE classarit.api_request_metrics'))
         self.client=self.client_type(self.app,base_url='http://127.0.0.1:8000')
         self.client.__enter__();self.addCleanup(self.client.__exit__,None,None,None)
 
@@ -68,6 +71,42 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         self.assertEqual(result.status_code,200,result.text)
         html=client.get('/dashboard').text
         return re.search(r'name="csrf-token" content="([^"]+)"',html).group(1)
+
+
+    def test_email_otp_registration_and_executive_controls(self):
+        sent = []
+        with patch('app.services.emailer.send_email', side_effect=lambda *args, **kwargs: sent.append((args, kwargs)) or {'id':'test'}), \
+             patch('app.auth.repository.generate_otp', return_value='123456'):
+            started = self.client.post('/auth/register/start', json={'full_name':'New Owner','email':'new-owner@example.com'})
+            self.assertEqual(started.status_code, 200, started.text)
+            self.assertEqual(len(sent), 1)
+            verify = self.client.post('/auth/register/verify', json={'challenge_id':started.json()['challenge_id'],'code':'123456'})
+            self.assertEqual(verify.status_code, 200, verify.text)
+            self.assertTrue(self.client.get('/auth/me').json()['authenticated'])
+
+        self.assertEqual(self.client.get('/executive').status_code, 403)
+        existing = self.client_type(self.app, base_url='http://127.0.0.1:8000')
+        existing.__enter__(); self.addCleanup(existing.__exit__, None, None, None)
+        self.login(existing, 'existing-google', 'existing@example.com')
+
+        exec_client = self.client_type(self.app, base_url='http://127.0.0.1:8000')
+        exec_client.__enter__(); self.addCleanup(exec_client.__exit__, None, None, None)
+        exec_csrf = self.login(exec_client, 'aniket-exec', 'aniketpathak1@gmail.com')
+        self.assertEqual(exec_client.get('/executive').status_code, 200)
+        data = exec_client.get('/api/executive/dashboard')
+        self.assertEqual(data.status_code, 200, data.text)
+        self.assertIn('api', data.json())
+        changed = exec_client.patch('/api/executive/settings', headers={'X-CSRF-Token':exec_csrf}, json={'google_new_accounts_enabled':False,'signup_enabled':False,'notification_emails_enabled':False})
+        self.assertEqual(changed.status_code, 200, changed.text)
+        self.assertFalse(changed.json()['settings']['google_new_accounts_enabled'])
+        self.assertEqual(self.client.post('/auth/register/start', json={'full_name':'Blocked','email':'blocked@example.com'}).status_code, 403)
+        self.login(existing, 'existing-google', 'existing@example.com')
+        newcomer = self.client_type(self.app, base_url='http://127.0.0.1:8000')
+        newcomer.__enter__(); self.addCleanup(newcomer.__exit__, None, None, None)
+        with patch('app.auth.routes.oauth.google.authorize_access_token',new=AsyncMock(return_value={
+            'id_token':'verified-by-mocked-provider','userinfo':{'sub':'brand-new','email':'brand-new@example.com','email_verified':True,'name':'Brand New'}})):
+            blocked = newcomer.get('/auth/google/callback')
+        self.assertEqual(blocked.status_code, 400)
 
     def test_automatic_callback_urls(self):
         from urllib.parse import parse_qs,urlsplit

@@ -1,10 +1,11 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, Request, HTTPException, Query
+from fastapi import APIRouter, Depends, Request, HTTPException, Query, BackgroundTasks
 from ...auth.dependencies import require_user
 from ..db import transaction
 from ..access import access
 from ..schemas import WorkspaceInput, InviteInput, MemberInput, PolicyInput
 from ..services import organizations, queries, makeups, overview
+from ...services import notifications
 
 router = APIRouter(prefix="/api")
 
@@ -49,9 +50,17 @@ def workspace_section(
 
 
 @router.post("/workspaces/{workspace_id}/invitations", status_code=201)
-def invite(p: InviteInput, request: Request, a=Depends(access)):
+def invite(p: InviteInput, request: Request, background_tasks: BackgroundTasks, a=Depends(access)):
     result = organizations.invite(a, p)
     result["url"] = str(request.url_for("invitation_page", token=result.pop("token")))
+    notifications.send_invitation(
+        background_tasks,
+        result["email"],
+        a.workspace["name"],
+        result["url"],
+        p.roles,
+        expires_hours=72,
+    )
     return result
 
 
@@ -68,8 +77,27 @@ def revoke(invitation_id: UUID, a=Depends(access)):
 
 
 @router.patch("/workspaces/{workspace_id}/members/{member_id}")
-def member(member_id: UUID, p: MemberInput, a=Depends(access)):
-    return organizations.update_member(a, member_id, p)
+def member(member_id: UUID, p: MemberInput, background_tasks: BackgroundTasks, a=Depends(access)):
+    before = organizations.member_contact(a, member_id)
+    result = organizations.update_member(a, member_id, p)
+    after = organizations.member_contact(a, member_id)
+    if before and after and before.get("email"):
+        old_roles = set(before.get("roles") or [])
+        new_roles = set(after.get("roles") or [])
+        teacher_related = "TEACHER" in old_roles or "TEACHER" in new_roles
+        removed = before.get("status") == "ACTIVE" and after.get("status") != "ACTIVE"
+        changed = old_roles != new_roles
+        if teacher_related and (removed or changed):
+            if removed:
+                change = "Your teacher access was removed or deactivated."
+            elif "TEACHER" in new_roles and "TEACHER" not in old_roles:
+                change = "You were added as a teacher."
+            elif "TEACHER" in old_roles and "TEACHER" not in new_roles:
+                change = "Your teacher role was removed."
+            else:
+                change = "Your teacher access was updated."
+            notifications.send_staff_change(background_tasks, before["email"], a.workspace["name"], before.get("full_name"), change)
+    return result
 
 
 @router.put("/workspaces/{workspace_id}/makeup-policy")

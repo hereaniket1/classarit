@@ -1,13 +1,59 @@
 (() => {
-  const toast = document.getElementById('signup-toast');
-  let toastTimer;
-  document.querySelectorAll('[data-signup]').forEach(button => button.addEventListener('click', () => {
-    toast.hidden = false;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { toast.hidden = true; }, 6000);
+  const signupPanel = document.getElementById('signup-panel');
+  const signupStatus = document.getElementById('signup-status');
+  const startForm = document.getElementById('signup-start-form');
+  const verifyForm = document.getElementById('signup-verify-form');
+  const sent = document.getElementById('signup-sent');
+  const showSignup = () => {
+    if (!signupPanel) { window.location.href = '/login#signup'; return; }
+    signupPanel.hidden = false;
+    signupPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    signupPanel.querySelector('input:not([type=hidden])')?.focus();
+  };
+  document.querySelectorAll('[data-signup]').forEach(button => button.addEventListener('click', event => {
+    event.preventDefault();
+    showSignup();
   }));
-  document.querySelector('[data-dismiss-toast]')?.addEventListener('click', () => { toast.hidden = true; });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && toast) toast.hidden = true; });
+  if (window.location.hash === '#signup') showSignup();
+  const json = async (url, body) => {
+    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.detail || 'Please try again.');
+    return payload;
+  };
+  startForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    signupStatus.textContent = 'Sending your OTP…';
+    const button = startForm.querySelector('button');
+    button.disabled = true;
+    try {
+      const payload = Object.fromEntries(new FormData(startForm));
+      const result = await json('/auth/register/start', payload);
+      verifyForm.elements.challenge_id.value = result.challenge_id;
+      sent.textContent = `We sent a 6-digit code to ${result.email}.`;
+      startForm.hidden = true;
+      verifyForm.hidden = false;
+      signupStatus.textContent = '';
+      verifyForm.elements.code.focus();
+    } catch (error) {
+      signupStatus.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+  verifyForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    signupStatus.textContent = 'Verifying…';
+    const button = verifyForm.querySelector('button');
+    button.disabled = true;
+    try {
+      await json('/auth/register/verify', Object.fromEntries(new FormData(verifyForm)));
+      window.location.assign('/dashboard');
+    } catch (error) {
+      signupStatus.textContent = error.message;
+      button.disabled = false;
+    }
+  });
 
   const result = document.getElementById('auth-result');
   if (result?.dataset.success === 'true') {
@@ -52,7 +98,7 @@
     }
     if (event.data?.type !== 'classarit:login-complete') return;
     clearTimeout(timer);
-    check(); // The server session, never the message, is proof of login.
+    check();
   });
   button.addEventListener('click', () => {
     stop(); attempts = 0;
@@ -66,7 +112,6 @@
     }
     button.disabled = true;
     status.textContent = 'Complete your login in the Google window. You can also continue in this tab.';
-    // Polling also handles providers that sever window.opener for isolation.
     timer = setTimeout(check, 1500);
   });
   window.addEventListener('pagehide', stop);

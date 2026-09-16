@@ -125,7 +125,7 @@ def invite(a, payload):
         invited_by_membership_id=a.member["id"],
         proposed_roles=sorted(set(payload.roles)),
         token_hash=hashlib.sha256(token.encode()).hexdigest(),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=72),
     )
     return {"id": row["id"], "token": token, "email": email}
 
@@ -260,3 +260,17 @@ def update_member(a, member_id, payload):
             r=role,
         )
     return {"ok": True}
+
+
+def member_contact(a, member_id):
+    return a.db.first(
+        """SELECT m.id,m.status,u.full_name,e.email,array_agg(r.role ORDER BY r.role) AS roles
+        FROM {s}.workspace_memberships m
+        JOIN {s}.app_users u ON u.id=m.user_id
+        LEFT JOIN {s}.user_emails e ON e.app_user_id=u.id AND e.is_primary=true
+        LEFT JOIN {s}.membership_roles r ON r.workspace_id=m.workspace_id AND r.membership_id=m.id
+        WHERE m.workspace_id=:w AND m.id=:m
+        GROUP BY m.id,u.full_name,e.email""",
+        w=a.id,
+        m=member_id,
+    )

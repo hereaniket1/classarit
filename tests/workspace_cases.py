@@ -452,9 +452,14 @@ class WorkspaceCases:
         self.ws_setup()
         prog = self.new_program()
         self.post("/students", {"full_name": "Private student"})
-        invite = self.post(
-            "/invitations", {"email": "bob@example.com", "roles": ["TEACHER"]}
-        )
+        from unittest.mock import patch
+        sent = []
+        with patch('app.services.emailer.send_email', side_effect=lambda *args, **kwargs: sent.append((args, kwargs)) or {'id':'test'}):
+            invite = self.post(
+                "/invitations", {"email": "bob@example.com", "roles": ["TEACHER"]}
+            )
+        self.assertEqual(len(sent), 1)
+        self.assertIn('bob@example.com', sent[0][0][0])
         token = invite["url"].rsplit("/", 1)[1]
         other = self.client_type(self.app, base_url="http://127.0.0.1:8000")
         other.__enter__()

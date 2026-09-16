@@ -10,7 +10,26 @@
     <p class="login-help">A secure Google window will open to complete your login.</p>
     <p id="login-status" role="status" aria-live="polite">{% if not google_ready %}Google login will be available soon. Please check back later.{% endif %}</p>
     <a href="/auth/google/login" id="same-window-login" hidden>Continue in this tab instead →</a>
-    <div class="login-divider"></div><p class="signup-prompt">New here? <button type="button" class="inline-button" data-signup>Sign up</button></p>
+    <div class="login-divider"></div><p class="signup-prompt">New here? <button type="button" class="inline-button" data-signup>Sign up with email OTP</button></p>
+    <section class="signup-panel" id="signup-panel" {% if not signup_enabled %}data-disabled="true"{% endif %} hidden>
+      <h3>Create your account</h3>
+      {% if signup_enabled %}
+      <form id="signup-start-form">
+        <label>Full name<input class="form-control" name="full_name" autocomplete="name" required maxlength="150"></label>
+        <label>Email<input class="form-control" name="email" type="email" autocomplete="email" required maxlength="254"></label>
+        <button type="submit" class="btn btn-primary">Send OTP</button>
+      </form>
+      <form id="signup-verify-form" hidden>
+        <input type="hidden" name="challenge_id">
+        <p class="login-help" id="signup-sent"></p>
+        <label>Verification code<input class="form-control" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+        <button type="submit" class="btn btn-primary">Verify and continue</button>
+      </form>
+      {% else %}
+      <p class="login-help">Signup is currently paused. Existing users can still log in.</p>
+      {% endif %}
+      <p id="signup-status" role="status" aria-live="polite"></p>
+    </section>
   </section>
 </main>
 {% endblock %}

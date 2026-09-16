@@ -499,7 +499,7 @@ export function action(s, key, id, refresh, context = {}) {
         const result = await api("/invitations", "POST", d);
         await refresh();
         notice(
-          `Share this private invitation link with ${result.email}: ${result.url} (expires in 7 days).`,
+          `Share this private invitation link with ${result.email}: ${result.url} (expires in 72 hours).`,
         );
       },
     );

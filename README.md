@@ -78,8 +78,7 @@ Enable the JetBrains Mermaid plugin to render this README's diagrams in Markdown
 5. Start the app, choose **Log in → Continue with Google**, complete Google approval,
    and return to your dashboard. If the popup is blocked, use **Continue in this tab**.
 
-A first successful Google login creates its account automatically. The separate
-Signup button only shows a coming-soon toast; no password signup or OTP is enabled.
+A first successful Google login creates its account automatically when new Google accounts are enabled. Email OTP signup is also available from the login page and can be paused from the executive dashboard.
 An existing email belonging to another identity requires a future linking flow and
 is not automatically merged in this release.
 
@@ -88,7 +87,10 @@ is not automatically merged in this release.
 ```mermaid
 flowchart TD
     Home[Public landing page] --> Choice{Choose action}
-    Choice -->|Sign up| Toast[Show coming-soon toast]
+    Choice -->|Sign up| Signup[Email OTP signup]
+    Signup --> Otp[Send 6-digit Resend OTP]
+    Otp --> Verify[Verify OTP and activate account]
+    Verify --> Session
     Choice -->|Log in| Login[Separate login page]
     Login --> Click[Continue with Google]
     Click --> Popup{Popup allowed?}
@@ -110,7 +112,7 @@ flowchart TD
     Dashboard --> Type{Account type}
     Type -->|OWNER| Portfolio[All owned workspaces and class rankings]
     Type -->|MEMBER| Assigned[Assigned classes or first-workspace setup]
-    Type -->|APPOWNER| Product[Reserved product performance page]
+    Type -->|APPOWNER| Product[Reserved product placeholder]
     Portfolio --> Manage[Select workspace gear]
     Assigned --> Manage
     Manage --> Request[Check session, membership, role and assignment on each request]
@@ -181,9 +183,9 @@ backend operation and follow-up refresh finish.
 
 ### Current MVP limitations
 
-- Signup still shows the coming-soon notice. Password/OTP, Apple/Facebook and account
-  linking remain future work, as requested.
-- Invitations are shareable links; the app does not send email invitations yet.
+- Email OTP signup is implemented. Password setup/login, Apple/Facebook and account
+  linking remain future work.
+- Invitations remain shareable links and are also emailed through Resend when email delivery is configured.
 - Schedule is an occurrence list, not a drag-and-drop calendar. Weekly recurrence
   generation is available; bulk edit/cancel for a whole series is still future work.
 - Program teacher edits change defaults for new sessions; existing session assignments
@@ -328,10 +330,10 @@ credential belongs in `.env.example`, source files or the README.
 | `DB_SSLMODE` | PostgreSQL TLS policy; use `require` or the provider's stricter recommendation for hosted databases |
 | `SESSION_SECRET_KEY` | Optional shared signing key (minimum 32 characters when supplied); otherwise generated automatically |
 | `CLASSARIT_DATA_DIR` | SQLite/uploads directory; defaults to the project root |
-| `RESEND_API_KEY`, `RESEND_FROM_EMAIL` | Reserved for future OTP sending; not used yet |
-| `OTP_HMAC_SECRET` | Reserved for future OTP hashing; separate from the session secret |
+| `RESEND_API_KEY`, `RESEND_FROM_EMAIL` | Resend email delivery for OTP, invitations and schedule notifications |
+| `OTP_HMAC_SECRET` | HMAC secret for email OTP challenge digests; keep separate from the session secret |
 
-Resend uses an API key, not a client ID. No email is sent by this release.
+Resend uses an API key, not a client ID. Email delivery is skipped safely when Resend settings are blank.
 Missing Google settings leave the landing page available with login disabled.
 A database/provider failure shows a generic login error without exposing secrets.
 
@@ -545,9 +547,26 @@ and extension. It uses a transaction and RESTRICT, so dependencies from business
 tables stop the operation rather than cascading into unrelated data. Review and
 back up the target database before running it. It is never run by the application.
 
+
+## Executive dashboard, email OTP and notifications
+
+`/executive` is a login-protected product dashboard. For now, access is hardcoded to `aniketpathak1@gmail.com`. It shows the last 7 days of minimal API telemetry, registration totals, and product toggles.
+
+The product toggles are stored in `classarit.app_settings`:
+
+- `google_new_accounts_enabled`: existing Google identities can still log in when this is off, but first-time Google emails cannot create new accounts.
+- `signup_enabled`: controls email OTP registration only. Existing login methods continue to work.
+- `notification_emails_enabled`: controls invitation, staff-change and student schedule notification emails.
+
+Email OTP registration uses `auth_challenges` with purpose `REGISTRATION_EMAIL_OTP`. The OTP expires in 10 minutes and is stored only as an HMAC digest using `OTP_HMAC_SECRET`; if that value is not configured, the session signing key is used as a fallback.
+
+Operational emails use Resend through `RESEND_API_KEY` and `RESEND_FROM_EMAIL`. Staff invitations expire after 72 hours. Student/guardian schedule notifications are sent when a student is added to a one-time or recurring schedule, booked into an event, or removed by session cancellation.
+
+API telemetry is stored in `classarit.api_request_metrics` with method, path, route template, status code, latency and timestamp only. Query strings, request bodies, IP addresses and user agents are not stored. The middleware keeps only recent rows by deleting samples older than 30 days during inserts.
+
 ## Future login methods
 
-Signup currently shows only a toast. Password signup/setup/reset, Resend OTP,
+Email OTP signup is implemented for registration. Password signup/setup/reset,
 Apple/Facebook and multi-provider linking remain future work. The database supports
 their identities; routes and proof flows still need implementation.
 
@@ -880,7 +899,7 @@ workspace database; preserve the new tables if rolling application code back.
 
 Phases 1–6 below have working UI/API foundations in this release, subject to the
 MVP limitations above. Phases 7–8 remain the recommended next steps. Google login
-remains the foundation; password signup, Apple/Facebook and OTP are separate work.
+remains the foundation; password signup, Apple/Facebook and account linking are separate work.
 
 | Phase | Delivery | Completion check |
 | --- | --- | --- |
@@ -1155,10 +1174,9 @@ an explicit future correction workflow; the API rejects that shortcut.
 5. For a deployment using another database, initialize auth dependencies and run the
    migration runner before deploying this code. `/health` checks the web process only;
    verify a signed-in dashboard separately. Keep Render's existing `python run.py` start.
-6. Next implement workspace billing/materials migration, then invitation delivery,
-   recurrence, audit trails, backup/restore rehearsals and pagination. Add password/OTP
-   and other identity providers only with the deliberate account-linking workflow
-   described above.
+6. Next implement workspace billing/materials migration, then deeper audit trails,
+   backup/restore rehearsals and pagination. Add password login and other identity
+   providers only with the deliberate account-linking workflow described above.
 
 Mermaid blocks render in GitHub and in IntelliJ with its Mermaid Markdown support
 installed/enabled. They are README documentation, so no Mermaid JavaScript dependency

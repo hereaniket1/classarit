@@ -2,11 +2,14 @@ import logging
 import secrets
 
 from authlib.integrations.starlette_client import OAuth
-from fastapi import APIRouter, Request
+from pydantic import BaseModel, Field
+from fastapi import APIRouter, Request, BackgroundTasks
 from fastapi.responses import RedirectResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from ..views import templates
+from ..services import notifications
+from ..services.product_settings import setting_enabled
 from .settings import get_settings, google_callback_url
 from .dependencies import current_user
 from . import repository
@@ -15,6 +18,18 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 settings = get_settings()
 oauth = OAuth()
+
+
+class RegistrationStart(BaseModel):
+    full_name: str = Field(min_length=1, max_length=150)
+    email: str = Field(min_length=3, max_length=254)
+
+
+class RegistrationVerify(BaseModel):
+    challenge_id: str
+    code: str = Field(min_length=6, max_length=6)
+
+
 oauth.register('google', client_id=settings.client_id, client_secret=settings.client_secret,
                server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
                client_kwargs={'scope': 'openid email profile', 'code_challenge_method': 'S256'})
@@ -30,7 +45,7 @@ def result(request, success=False, message=''):
 def login_page(request: Request):
     if current_user(request):
         return RedirectResponse('/dashboard', status_code=303)
-    return templates.TemplateResponse('login.html', {'request':request, 'google_ready':settings.ready, 'invitation_pending':bool(request.session.get('pending_invitation'))})
+    return templates.TemplateResponse('login.html', {'request':request, 'google_ready':settings.ready, 'signup_enabled':setting_enabled('signup_enabled', True), 'invitation_pending':bool(request.session.get('pending_invitation'))})
 
 
 @router.get('/auth/google/login')
@@ -70,6 +85,36 @@ async def google_callback(request: Request):
         # Do not log OAuth codes, tokens, DB connection details or provider claims.
         logger.warning('Google callback could not be completed')
         return result(request, message='Sign-in could not be completed. Please try again or contact support.')
+
+
+@router.post('/auth/register/start')
+def register_start(payload: RegistrationStart, background_tasks: BackgroundTasks):
+    try:
+        challenge = repository.start_registration(payload.email, payload.full_name)
+        notifications.send_registration_otp(
+            background_tasks,
+            challenge['email'],
+            challenge['full_name'],
+            challenge['code'],
+        )
+        return {'ok': True, 'challenge_id': challenge['challenge_id'], 'email': challenge['email']}
+    except repository.LinkingRequired:
+        return JSONResponse({'detail':'This email is already registered. Please log in with an existing method.'}, status_code=409)
+    except repository.AccountUnavailable as error:
+        return JSONResponse({'detail':str(error)}, status_code=403)
+
+
+@router.post('/auth/register/verify')
+def register_verify(payload: RegistrationVerify, request: Request):
+    try:
+        user = repository.verify_registration(payload.challenge_id, payload.code)
+        repository.revoke_session(request.session.get('sid'))
+        sid = repository.create_session(user['id'])
+        request.session.clear()
+        request.session.update(sid=sid, csrf=secrets.token_urlsafe(32))
+        return {'ok': True}
+    except repository.AccountUnavailable as error:
+        return JSONResponse({'detail':str(error)}, status_code=400)
 
 
 @router.get('/auth/me')

@@ -1,5 +1,5 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from ..access import access, MANAGERS
 from ..schemas import (
     SessionInput,
@@ -13,18 +13,23 @@ from ..schemas import (
     BookingInput,
 )
 from ..services import scheduling, makeups
+from ...services import notifications
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}")
 
 
 @router.post("/sessions", status_code=201)
-def create(p: SessionInput, a=Depends(access)):
-    return scheduling.create(a, p)
+def create(p: SessionInput, background_tasks: BackgroundTasks, a=Depends(access)):
+    row = scheduling.create(a, p)
+    notifications.send_student_schedule_notice(background_tasks, a, [row["id"]], "added")
+    return row
 
 
 @router.post("/sessions/recurring", status_code=201)
-def create_recurring(p: RecurringSessionInput, a=Depends(access)):
-    return scheduling.create_recurring(a, p)
+def create_recurring(p: RecurringSessionInput, background_tasks: BackgroundTasks, a=Depends(access)):
+    result = scheduling.create_recurring(a, p)
+    notifications.send_student_schedule_notice(background_tasks, a, [row["id"] for row in result.get("sessions", [])], "added")
+    return result
 
 
 @router.post("/recurring-series/{series_id}/disable")
@@ -48,13 +53,17 @@ def reschedule(session_id: UUID, p: RescheduleInput, a=Depends(access)):
 
 
 @router.post("/sessions/{session_id}/participants", status_code=201)
-def participant(session_id: UUID, p: ParticipantInput, a=Depends(access)):
-    return scheduling.book_event(a, session_id, p)
+def participant(session_id: UUID, p: ParticipantInput, background_tasks: BackgroundTasks, a=Depends(access)):
+    row = scheduling.book_event(a, session_id, p)
+    notifications.send_student_schedule_notice(background_tasks, a, [session_id], "added")
+    return row
 
 
 @router.post("/sessions/{session_id}/cancel")
-def cancel(session_id: UUID, p: CancelInput, a=Depends(access)):
-    return makeups.cancel(a, session_id, p)
+def cancel(session_id: UUID, p: CancelInput, background_tasks: BackgroundTasks, a=Depends(access)):
+    result = makeups.cancel(a, session_id, p)
+    notifications.send_student_schedule_notice(background_tasks, a, [session_id], "removed")
+    return result
 
 
 @router.post("/sessions/{session_id}/complete")
