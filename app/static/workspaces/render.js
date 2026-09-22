@@ -1,15 +1,27 @@
-import { esc } from "./api.js?v=workspace-reporting-20260915";
-import { icon } from "./icons.js?v=workspace-reporting-20260915";
-import { renderCalendar } from "./calendar.js?v=workspace-reporting-20260915";
+import { esc } from "./api.js?v=password-profile-20260917";
+import { icon } from "./icons.js?v=password-profile-20260917";
+import { renderCalendar } from "./calendar.js?v=password-profile-20260917";
 export const button = (label, action, id = "", kind = "outline-primary") =>
   `<button type="button" class="btn btn-sm btn-${kind} action-icon" title="${esc(label)}" aria-label="${esc(label)}" data-action="${action}" data-id="${esc(id)}">${icon(action)}</button>`;
+const labeledButton = (label, action, id = "", kind = "outline-primary") =>
+  `<button type="button" class="btn btn-sm btn-${kind} labeled-action" title="${esc(label)}" aria-label="${esc(label)}" data-action="${action}" data-id="${esc(id)}">${icon(action)}<span>${esc(label)}</span></button>`;
 const badge = (x) => `<span class="badge-soft">${esc(x)}</span>`;
+const verificationBadge = (student, compact = false) => {
+  const verified = Boolean(student.is_verified);
+  const parent = student.verification_source === "PARENT_EMAIL";
+  const detail = verified
+    ? parent ? "Parent email verified" : "Student email verified"
+    : parent ? "Parent email is not verified" : "Student email is not verified";
+  return `<span class="verification-badge ${verified ? "is-verified" : "is-unverified"}" title="${esc(detail)}">${verified ? "Verified" : "Unverified"}</span>${compact ? "" : `<small class="student-verification-note">${esc(detail)}</small>`}`;
+};
 const table = (heads, rows, empty = "Nothing here yet.") =>
   rows.length
     ? `<div class="workspace-card table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table class="workspace-table"><thead><tr>${heads.map((x) => `<th>${esc(x)}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
     : `<div class="workspace-card empty">${esc(empty)}</div>`;
 export function render(s, tab) {
-  const manager = s.roles.some((r) =>
+  const owner = s.roles.includes("OWNER"),
+    teacher = s.roles.includes("TEACHER"),
+    manager = s.roles.some((r) =>
       ["OWNER", "ADMIN", "OPERATOR"].includes(r),
     ),
     admin = s.roles.some((r) => ["OWNER", "ADMIN"].includes(r));
@@ -38,7 +50,8 @@ export function render(s, tab) {
         ? `<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table class="workspace-table"><tbody>${people
             .map((p) => {
               const att = s.attendance.find((x) => x.participant_id === p.id);
-              return `<tr><td>${esc(name(s.students, p.student_id))} ${badge(p.participation_kind)}</td><td>${badge(att?.status || "Not marked")}</td><td><div class="row-actions">${!future && ss.status !== "CANCELLED" ? button("Attendance", "attendance", p.id) : ""}${manager && p.participation_kind !== "MAKEUP" ? button("Grant makeup", "grant", p.id) : ""}</div></td></tr>`;
+              const student = s.students.find((item) => item.id === p.student_id);
+              return `<tr><td>${esc(name(s.students, p.student_id))} ${student ? verificationBadge(student, true) : ""} ${badge(p.participation_kind)}</td><td>${badge(att?.status || "Not marked")}</td><td><div class="row-actions">${!future && ss.status !== "CANCELLED" ? button("Attendance", "attendance", p.id) : ""}${manager && p.participation_kind !== "MAKEUP" ? button("Grant makeup", "grant", p.id) : ""}</div></td></tr>`;
             })
             .join("")}</tbody></table></div>`
         : '<p class="subtext">No students booked yet.</p>'
@@ -98,9 +111,7 @@ export function render(s, tab) {
               .join(", "),
           ),
           `${s.enrollments.filter((e) => e.program_id === p.id && e.status === "ACTIVE").length} / ${p.capacity}`,
-          manager
-            ? `<div class="row-actions">${p.program_kind === "COURSE" ? button("Enroll student", "enroll", p.id) : ""}${button("Schedule", "session", p.id)}${button("Teachers", "teachers", p.id)}</div>`
-            : "",
+          manager ? labeledButton("Edit", "edit-program", p.id) : "",
         ]),
         "No classes yet.",
       )
@@ -120,7 +131,7 @@ export function render(s, tab) {
             ),
           );
           return [
-            esc(st.full_name),
+            `<span class="student-name-with-status"><span>${esc(st.full_name)}</span>${verificationBadge(st)}</span>${st.date_of_birth ? `<small class="student-verification-note">Born ${esc(st.date_of_birth)}</small>` : ""}`,
             `${esc(st.email)}<br>${esc(st.phone)}`,
             g
               ? `${esc(g.full_name)}<div class="subtext">${esc(g.phone || g.email)}</div>`
@@ -158,6 +169,78 @@ export function render(s, tab) {
         "No venues yet.",
       )
     );
+  if (tab === "settings") {
+    const danger = (label, action, id) =>
+      labeledButton(label, action, id, "outline-danger");
+    const settingsList = (title, description, rows, empty) =>
+      `<section class="workspace-card settings-card"><div class="settings-card-head"><div><h3>${esc(title)}</h3><p class="subtext">${esc(description)}</p></div></div>${
+        rows.length
+          ? `<div class="settings-list">${rows.join("")}</div>`
+          : `<p class="settings-empty">${esc(empty)}</p>`
+      }</section>`;
+    const row = (title, detail, action) =>
+      `<div class="settings-row"><div><strong>${esc(title)}</strong>${detail ? `<small>${esc(detail)}</small>` : ""}</div><div class="row-actions">${action}</div></div>`;
+    let body = head("Settings");
+    body += `<section class="workspace-card settings-card workspace-settings-card"><div><h3>${esc(s.workspace.name)}</h3><p class="subtext">${esc(s.workspace.workspace_type === "INDIVIDUAL" ? "Individual practice" : "Institute")} · ${esc(s.workspace.timezone)} · ${esc(s.workspace.currency)}</p></div><div class="row-actions">${owner ? `${labeledButton("Edit workspace", "edit-workspace")}${danger("Delete workspace", "delete-workspace")}` : '<span class="subtext">Only the Owner can edit or delete this workspace.</span>'}</div></section>`;
+    if (s.business_profile) {
+      const b = s.business_profile;
+      const aadhaar = b.owner_aadhaar_number
+        ? `Government ID •••• ${esc(String(b.owner_aadhaar_number).slice(-4))}`
+        : "Government ID not added";
+      body += `<section class="workspace-card settings-card"><h3>Business profile</h3><p class="subtext">${esc(b.legal_name)} · Business ID ${esc(b.gstin || "not added")} · ${aadhaar}</p><p class="subtext">${esc([b.address_line1, b.address_line2, b.city, b.state, b.postal_code, b.country].filter(Boolean).join(", "))}</p></section>`;
+    }
+    if (!admin && !teacher) {
+      body += `<section class="workspace-card settings-card"><h3>Workspace access</h3><p class="subtext">Operators can manage daily records from their related pages. Deletion is reserved for Owners and Admins.</p></section>`;
+      return body;
+    }
+    if (admin) {
+      const memberRows = s.members.map((m) => {
+        const isWorkspaceOwner = m.roles.includes("OWNER");
+        const canManage = !isWorkspaceOwner || owner;
+        return row(
+          m.full_name,
+          `${m.roles.join(" · ")} · ${m.status}${m.email ? ` · ${m.email}` : ""}`,
+          `${canManage ? labeledButton("Manage", "member", m.id) : ""}${!isWorkspaceOwner ? danger("Remove", "delete-member", m.id) : ""}`,
+        );
+      });
+      body += settingsList(
+        "People",
+        "Invite staff, assign one role, or remove workspace access.",
+        memberRows,
+        "No team members yet.",
+      ).replace(
+        '<div class="settings-card-head"><div><h3>People</h3><p class="subtext">Invite staff, assign one role, or remove workspace access.</p></div></div>',
+        `<div class="settings-card-head"><div><h3>People</h3><p class="subtext">Invite staff, assign one role, or remove workspace access.</p></div>${labeledButton("Invite member", "invite")}</div>`,
+      );
+    }
+    body += settingsList(
+      "Classes & events",
+      teacher && !admin ? "You can delete classes assigned to you." : "Deleting a class archives it and cancels its future schedules.",
+      s.programs.map((p) => row(p.name, p.program_kind, danger("Delete", "delete-program", p.id))),
+      "No active classes.",
+    );
+    body += settingsList(
+      "Upcoming schedules",
+      teacher && !admin ? "You can delete schedules assigned to you." : "Deleted schedules are cancelled and remain available in history.",
+      s.sessions.map((ss) => row(ss.title || name(s.programs, ss.program_id), time(ss.starts_at), danger("Delete", "delete-session", ss.id))),
+      "No upcoming schedules.",
+    );
+    if (admin) {
+      body += settingsList(
+        "Venues",
+        "A venue in use by an active class or upcoming schedule must be reassigned first.",
+        s.venues.map((v) => row(v.name, v.address, danger("Delete", "delete-venue", v.id))),
+        "No active venues.",
+      );
+      body += settingsList(
+        "Students",
+        "Deleting a student archives their profile and removes future participation.",
+        s.students.map((st) => row(st.full_name, st.email || st.phone || "No contact details", danger("Delete", "delete-student", st.id))),
+        "No active students.",
+      );
+    }
+    return body;
+  }
   if (tab === "team")
     return (
       head(
@@ -326,7 +409,8 @@ export function render(s, tab) {
                 .filter((p) => p.session_id === ss.id && p.status === "BOOKED")
                 .map((p) => {
                   const att = s.attendance.find((x) => x.participant_id === p.id);
-                  return `<tr><td>${esc(name(s.students, p.student_id))} ${badge(p.participation_kind)}</td><td>${badge(att?.status || "Not marked")}</td><td><div class="row-actions">${!future && ss.status !== "CANCELLED" ? button("Attendance", "attendance", p.id) : ""}${manager && p.participation_kind !== "MAKEUP" ? button("Grant makeup", "grant", p.id) : ""}</div></td></tr>`;
+                  const student = s.students.find((item) => item.id === p.student_id);
+                  return `<tr><td>${esc(name(s.students, p.student_id))} ${student ? verificationBadge(student, true) : ""} ${badge(p.participation_kind)}</td><td>${badge(att?.status || "Not marked")}</td><td><div class="row-actions">${!future && ss.status !== "CANCELLED" ? button("Attendance", "attendance", p.id) : ""}${manager && p.participation_kind !== "MAKEUP" ? button("Grant makeup", "grant", p.id) : ""}</div></td></tr>`;
                 })
                 .join("")}</tbody></table></div>`
             : ""}

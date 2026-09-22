@@ -4,6 +4,45 @@
   const startForm = document.getElementById('signup-start-form');
   const verifyForm = document.getElementById('signup-verify-form');
   const sent = document.getElementById('signup-sent');
+  const loginForm = document.getElementById('password-login-form');
+  const loginFormStatus = document.getElementById('password-login-status');
+  const loginCard = document.querySelector('.login-card');
+  const loading = window.ClassaritLoading;
+  document.querySelectorAll('[data-login]').forEach(link => link.addEventListener('click', event => {
+    if (!loginForm) return;
+    event.preventDefault();
+    signupPanel.hidden = true;
+    loginCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    loginForm.elements.email.focus({ preventScroll: true });
+  }));
+  document.querySelectorAll('[data-toggle-password]').forEach(button => button.addEventListener('click', () => {
+    const input = document.getElementById(button.dataset.togglePassword);
+    const visible = input.type === 'password';
+    input.type = visible ? 'text' : 'password';
+    button.setAttribute('aria-pressed', String(visible));
+    button.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+    button.title = visible ? 'Hide password' : 'Show password';
+  }));
+  const termsPopup = document.getElementById('terms-popup');
+  const openTerms = () => {
+    if (!termsPopup) return;
+    termsPopup.hidden = false;
+    termsPopup.querySelector('[data-terms-close]')?.focus();
+  };
+  const closeTerms = () => {
+    if (termsPopup) termsPopup.hidden = true;
+  };
+  document.querySelectorAll('[data-terms-open]').forEach(button => button.addEventListener('click', event => {
+    event.preventDefault();
+    openTerms();
+  }));
+  document.querySelectorAll('[data-terms-close]').forEach(button => button.addEventListener('click', closeTerms));
+  termsPopup?.addEventListener('click', event => {
+    if (event.target === termsPopup) closeTerms();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !termsPopup?.hidden) closeTerms();
+  });
   const showSignup = () => {
     if (!signupPanel) { window.location.href = '/login#signup'; return; }
     signupPanel.hidden = false;
@@ -14,6 +53,10 @@
     event.preventDefault();
     showSignup();
   }));
+  document.querySelector('[data-close-signup]')?.addEventListener('click', () => {
+    signupPanel.hidden = true;
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  });
   if (window.location.hash === '#signup') showSignup();
   const json = async (url, body) => {
     const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body) });
@@ -21,14 +64,32 @@
     if (!response.ok) throw new Error(payload.detail || 'Please try again.');
     return payload;
   };
+  loginForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    loginFormStatus.textContent = '';
+    loading?.begin(loginCard, 'login', { rows: 3 });
+    try {
+      await json('/auth/password/login', Object.fromEntries(new FormData(loginForm)));
+      window.location.assign('/dashboard');
+    } catch (error) {
+      loginFormStatus.textContent = error.message;
+      loading?.end(loginCard);
+    }
+  });
   startForm?.addEventListener('submit', async event => {
     event.preventDefault();
-    signupStatus.textContent = 'Sending your OTP…';
+    signupStatus.textContent = 'Creating your account…';
     const button = startForm.querySelector('button');
     button.disabled = true;
+    loading?.begin(signupPanel, 'registration email', { rows: 3 });
     try {
       const payload = Object.fromEntries(new FormData(startForm));
-      const result = await json('/auth/register/start', payload);
+      payload.accepted_terms = payload.accepted_terms === 'true';
+      const result = await json('/auth/password/register', payload);
+      if (!result.verification_required) {
+        window.location.assign('/dashboard');
+        return;
+      }
       verifyForm.elements.challenge_id.value = result.challenge_id;
       sent.textContent = `We sent a 6-digit code to ${result.email}.`;
       startForm.hidden = true;
@@ -39,6 +100,7 @@
       signupStatus.textContent = error.message;
     } finally {
       button.disabled = false;
+      loading?.end(signupPanel);
     }
   });
   verifyForm?.addEventListener('submit', async event => {
@@ -46,14 +108,28 @@
     signupStatus.textContent = 'Verifying…';
     const button = verifyForm.querySelector('button');
     button.disabled = true;
+    loading?.begin(signupPanel, 'account verification', { rows: 3 });
     try {
-      await json('/auth/register/verify', Object.fromEntries(new FormData(verifyForm)));
+      await json('/auth/password/register/verify', Object.fromEntries(new FormData(verifyForm)));
       window.location.assign('/dashboard');
     } catch (error) {
       signupStatus.textContent = error.message;
       button.disabled = false;
+    } finally {
+      loading?.end(signupPanel);
     }
   });
+
+  const loginDestination = async () => {
+    try {
+      const response = await fetch('/auth/me', { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) return '/dashboard';
+      const payload = await response.json();
+      return payload.next_url || '/dashboard';
+    } catch (_) {
+      return '/dashboard';
+    }
+  };
 
   const result = document.getElementById('auth-result');
   if (result?.dataset.success === 'true') {
@@ -61,7 +137,7 @@
       window.opener.postMessage({ type: 'classarit:login-complete' }, window.location.origin);
       window.close();
     } else {
-      window.location.replace('/dashboard');
+      loginDestination().then(url => window.location.replace(url));
     }
   }
 
@@ -73,15 +149,23 @@
   if (!button) return;
   const status = document.getElementById('login-status');
   const fallback = document.getElementById('same-window-login');
+  const googleReady = button.dataset.googleReady === 'true';
   let popup, timer, attempts = 0;
-  const stop = () => { clearTimeout(timer); button.disabled = false; };
+  const syncGoogleButton = () => {
+    button.disabled = !googleReady;
+  };
+  syncGoogleButton();
+  const stop = () => { clearTimeout(timer); syncGoogleButton(); };
   const check = async () => {
     try {
       const response = await fetch('/auth/me', { credentials: 'same-origin', cache: 'no-store' });
-      if (response.ok && (await response.json()).authenticated) {
-        stop();
-        window.location.assign('/dashboard');
-        return;
+      if (response.ok) {
+        const payload = await response.json();
+        if (payload.authenticated) {
+          stop();
+          window.location.assign(payload.next_url || '/dashboard');
+          return;
+        }
       }
     } catch (_) { /* A brief network interruption may resolve on the next poll. */ }
     if (++attempts >= 90) {
@@ -100,7 +184,7 @@
     clearTimeout(timer);
     check();
   });
-  button.addEventListener('click', () => {
+  button.addEventListener('click', async () => {
     stop(); attempts = 0;
     const width = 500, height = 650;
     popup = window.open('/auth/google/login', 'classarit-google-login',

@@ -195,6 +195,7 @@ def _blank(a):
         "policy": None,
         "invitations": [],
         "members": [],
+        "business_profile": None,
         "metrics": {},
     }
     for key in SECTION_TABLE_KEYS:
@@ -211,18 +212,43 @@ def _all(a, table, order="id"):
 
 def _active_students(a):
     return a.db.all(
-        "SELECT * FROM {s}.students WHERE workspace_id=:w AND status='ACTIVE' ORDER BY full_name",
+        """SELECT st.*,
+        CASE
+          WHEN st.date_of_birth IS NOT NULL
+           AND st.date_of_birth > CURRENT_DATE - interval '18 years'
+          THEN EXISTS (
+            SELECT 1 FROM {s}.student_guardians sg
+            JOIN {s}.guardians g ON g.workspace_id=sg.workspace_id AND g.id=sg.guardian_id
+            JOIN {s}.user_emails ue ON ue.app_user_id=g.linked_user_id
+              AND ue.is_primary=true AND ue.verified_at IS NOT NULL
+            WHERE sg.workspace_id=st.workspace_id AND sg.student_id=st.id AND sg.is_primary
+          )
+          ELSE EXISTS (
+            SELECT 1 FROM {s}.user_emails ue
+            WHERE ue.app_user_id=st.linked_user_id
+              AND ue.is_primary=true AND ue.verified_at IS NOT NULL
+          )
+        END AS is_verified,
+        CASE
+          WHEN st.date_of_birth IS NOT NULL
+           AND st.date_of_birth > CURRENT_DATE - interval '18 years'
+          THEN 'PARENT_EMAIL'
+          ELSE 'STUDENT_EMAIL'
+        END AS verification_source
+        FROM {s}.students st
+        WHERE st.workspace_id=:w AND st.status='ACTIVE' ORDER BY st.full_name""",
         w=a.id,
     )
 
 
 def _members(a):
     return a.db.all(
-        "SELECT m.id,m.status,u.full_name,array_agg(r.role ORDER BY r.role) roles "
+        "SELECT m.id,m.status,u.full_name,e.email,array_agg(r.role ORDER BY r.role) roles "
         "FROM {s}.workspace_memberships m "
         "JOIN {s}.app_users u ON u.id=m.user_id "
+        "LEFT JOIN {s}.user_emails e ON e.app_user_id=u.id AND e.is_primary=true "
         "JOIN {s}.membership_roles r ON r.membership_id=m.id AND r.workspace_id=m.workspace_id "
-        "WHERE m.workspace_id=:w GROUP BY m.id,u.full_name ORDER BY u.full_name",
+        "WHERE m.workspace_id=:w GROUP BY m.id,u.full_name,e.email ORDER BY u.full_name",
         w=a.id,
     )
 
@@ -237,7 +263,8 @@ def _teacher_programs(a):
           ON cs.workspace_id=p.workspace_id AND cs.program_id=p.id
         LEFT JOIN {s}.session_teachers st
           ON st.workspace_id=cs.workspace_id AND st.session_id=cs.id AND st.membership_id=:m
-        WHERE p.workspace_id=:w AND (pt.membership_id IS NOT NULL OR st.membership_id IS NOT NULL)
+        WHERE p.workspace_id=:w AND p.status='ACTIVE'
+          AND (pt.membership_id IS NOT NULL OR st.membership_id IS NOT NULL)
         ORDER BY p.name""",
         w=a.id,
         m=a.member["id"],
@@ -245,7 +272,28 @@ def _teacher_programs(a):
 
 
 def _programs(a):
-    return _all(a, "teaching_programs", "name") if a.roles.intersection(MANAGERS) else _teacher_programs(a)
+    return (
+        a.db.all(
+            "SELECT * FROM {s}.teaching_programs WHERE workspace_id=:w AND status='ACTIVE' ORDER BY name",
+            w=a.id,
+        )
+        if a.roles.intersection(MANAGERS)
+        else _teacher_programs(a)
+    )
+
+
+def _venues(a):
+    return a.db.all(
+        "SELECT * FROM {s}.venues WHERE workspace_id=:w AND archived_at IS NULL ORDER BY name",
+        w=a.id,
+    )
+
+
+def _spaces(a):
+    return a.db.all(
+        "SELECT * FROM {s}.venue_spaces WHERE workspace_id=:w AND archived_at IS NULL ORDER BY name",
+        w=a.id,
+    )
 
 
 def _program_ids(rows):
@@ -286,9 +334,9 @@ def _action_refs(a, result):
         if not result["members"]:
             result["members"] = _members(a)
         if not result["venues"]:
-            result["venues"] = _all(a, "venues", "name")
+            result["venues"] = _venues(a)
         if not result["spaces"]:
-            result["spaces"] = _all(a, "venue_spaces", "name")
+            result["spaces"] = _spaces(a)
         if not result["students"]:
             result["students"] = _active_students(a)
     return result
@@ -300,10 +348,19 @@ def _load_policy(a, result):
     )
 
 
+def _load_business_profile(a, result):
+    if not a.workspace.get("business_profile_id"):
+        return
+    result["business_profile"] = a.db.first(
+        "SELECT * FROM {s}.business_profiles WHERE id=:id",
+        id=a.workspace["business_profile_id"],
+    )
+
+
 def section(a, tab, month=None, history=False):
     from fastapi import HTTPException
 
-    allowed = {"calendar", "classes", "students", "sessions", "venues", "team", "makeups", "reporting"}
+    allowed = {"calendar", "classes", "students", "sessions", "venues", "team", "makeups", "reporting", "settings"}
     if tab not in allowed:
         raise HTTPException(404, "Workspace section not found.")
     if tab == "reporting" and "OWNER" not in a.roles:
@@ -311,6 +368,7 @@ def section(a, tab, month=None, history=False):
 
     result = _blank(a)
     _action_refs(a, result)
+    _load_business_profile(a, result)
 
     if tab == "calendar":
         month_key = month
@@ -335,7 +393,7 @@ def section(a, tab, month=None, history=False):
     if tab == "students":
         if not a.roles.intersection(MANAGERS):
             raise HTTPException(403, "This section is not available for your role.")
-        result["students"] = _all(a, "students", "full_name")
+        result["students"] = _active_students(a)
         student_ids = {r["id"] for r in result["students"]}
         result["student_guardians"] = _rows_for_ids(_all(a, "student_guardians", "student_id"), "student_id", student_ids)
         guardian_ids = {r["guardian_id"] for r in result["student_guardians"]}
@@ -359,7 +417,9 @@ def section(a, tab, month=None, history=False):
         if a.roles.intersection(MANAGERS):
             result["students"] = _active_students(a)
         else:
-            result["students"] = _rows_for_ids(_all(a, "students", "full_name"), "id", student_ids)
+            # Teachers only receive students booked into their returned sessions, but
+            # retain the same verification context shown to workspace managers.
+            result["students"] = _rows_for_ids(_active_students(a), "id", student_ids)
         result["attendance"] = _rows_for_ids(_all(a, "attendance"), "participant_id", participant_ids)
         _load_policy(a, result)
         return result
@@ -367,8 +427,50 @@ def section(a, tab, month=None, history=False):
     if tab == "venues":
         if not a.roles.intersection(MANAGERS):
             raise HTTPException(403, "This section is not available for your role.")
-        result["venues"] = _all(a, "venues", "name")
-        result["spaces"] = _all(a, "venue_spaces", "name")
+        result["venues"] = _venues(a)
+        result["spaces"] = _spaces(a)
+        return result
+
+    if tab == "settings":
+        can_delete_all = bool(a.roles.intersection({"OWNER", "ADMIN"}))
+        can_delete_assigned = "TEACHER" in a.roles
+        if can_delete_all or can_delete_assigned:
+            result["programs"] = (
+                _programs(a)
+                if can_delete_all
+                else a.db.all(
+                    """SELECT DISTINCT p.*
+                    FROM {s}.teaching_programs p
+                    JOIN {s}.program_teachers pt
+                      ON pt.workspace_id=p.workspace_id AND pt.program_id=p.id
+                    WHERE p.workspace_id=:w AND p.status='ACTIVE'
+                      AND pt.membership_id=:m
+                    ORDER BY p.name""",
+                    w=a.id,
+                    m=a.member["id"],
+                )
+            )
+            program_ids = _program_ids(result["programs"])
+            result["program_teachers"] = _rows_for_ids(
+                _all(a, "program_teachers", "program_id"),
+                "program_id",
+                program_ids,
+            )
+            result["sessions"] = _sessions(a)
+            result["session_teachers"] = _rows_for_ids(
+                _all(a, "session_teachers", "session_id"),
+                "session_id",
+                {row["id"] for row in result["sessions"]},
+            )
+        if can_delete_all:
+            result["venues"] = _venues(a)
+            result["spaces"] = _spaces(a)
+            result["students"] = _active_students(a)
+            result["members"] = _members(a)
+            result["invitations"] = a.db.all(
+                "SELECT id,email,proposed_roles,status,expires_at FROM {s}.workspace_invitations WHERE workspace_id=:w ORDER BY created_at DESC",
+                w=a.id,
+            )
         return result
 
     if tab == "team":

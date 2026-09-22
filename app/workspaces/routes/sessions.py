@@ -66,6 +66,23 @@ def cancel(session_id: UUID, p: CancelInput, background_tasks: BackgroundTasks, 
     return result
 
 
+@router.delete("/sessions/{session_id}")
+def delete_session(
+    session_id: UUID,
+    background_tasks: BackgroundTasks,
+    a=Depends(access),
+):
+    result = makeups.cancel(
+        a,
+        session_id,
+        CancelInput(reason="Deleted from workspace settings", grant_makeups=False),
+    )
+    notifications.send_student_schedule_notice(
+        background_tasks, a, [session_id], "removed"
+    )
+    return result
+
+
 @router.post("/sessions/{session_id}/complete")
 def complete(session_id: UUID, a=Depends(access)):
     from datetime import datetime, timezone

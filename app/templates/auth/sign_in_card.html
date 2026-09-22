@@ -1,0 +1,53 @@
+  <section class="login-card" id="sign-in" aria-labelledby="login-title">
+    <div class="brand-mark">C</div><h2 id="login-title">{% if invitation_pending %}Log in to accept your invitation{% else %}Sign in to Classarit{% endif %}</h2>
+    <p class="text-muted">{% if invitation_pending %}Use the email address your team invited. After login, you’ll return to the invitation.{% else %}Log in to your Classarit dashboard.{% endif %}</p>
+    <button type="button" class="google-button" id="google-login" data-google-ready="{{ 'true' if google_ready else 'false' }}" disabled><span class="google-letter" aria-hidden="true">G</span>Continue with Google</button>
+    <p class="login-help">By continuing with Google, you accept the <button type="button" class="terms-link" data-terms-open>Classarit terms and conditions</button>. First-time Google users confirm them while completing profile setup.</p>
+    <p id="login-status" role="status" aria-live="polite">{% if not google_ready %}Google login will be available soon. Please check back later.{% endif %}</p>
+    <a href="/auth/google/login" id="same-window-login" hidden>Continue in this tab instead →</a>
+    <div class="login-choice"><span>or sign in with email</span></div>
+    <form id="password-login-form" class="password-login-form">
+      <label>Email<input class="form-control" name="email" type="email" autocomplete="email" placeholder="you@example.com" required maxlength="254"></label>
+      <label for="login-password">Password</label><div class="password-control"><input id="login-password" class="form-control" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required maxlength="128"><button type="button" class="password-toggle" data-toggle-password="login-password" aria-label="Show password" aria-pressed="false" title="Show password"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+      <button type="submit" class="btn btn-primary">Log in</button>
+    </form>
+    <p id="password-login-status" class="auth-form-status" role="status" aria-live="polite"></p>
+    <div class="login-divider"></div><p class="signup-prompt">New here? <button type="button" class="inline-button" data-signup>Create an account</button></p>
+    <section class="signup-panel" id="signup-panel" data-email-verification="{{ 'true' if email_verification_enabled else 'false' }}" {% if not signup_enabled %}data-disabled="true"{% endif %} hidden>
+      <div class="signup-heading"><h3>Create your account</h3><button type="button" class="inline-button" data-close-signup aria-label="Close signup">Close</button></div>
+      {% if signup_enabled %}
+      <form id="signup-start-form">
+        <label>Full name<input class="form-control" name="full_name" autocomplete="name" required maxlength="150"></label>
+        <label>Phone number<input class="form-control" name="phone" type="tel" autocomplete="tel" required minlength="5" maxlength="30"></label>
+        <label>Email<input class="form-control" name="email" type="email" autocomplete="email" required maxlength="254"></label>
+        <label>Password<input class="form-control" name="password" type="password" autocomplete="new-password" required minlength="10" maxlength="128"></label>
+        <p class="password-help">Use at least 10 characters. You can add birth date and country later from Profile.</p>
+        <label class="terms-check"><input type="checkbox" name="accepted_terms" value="true" required> I accept the <button type="button" class="terms-link" data-terms-open>Classarit terms and conditions</button></label>
+        <button type="submit" class="btn btn-primary">Create account</button>
+      </form>
+      <form id="signup-verify-form" hidden>
+        <input type="hidden" name="challenge_id">
+        <p class="login-help" id="signup-sent"></p>
+        <label>Verification code<input class="form-control" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+        <button type="submit" class="btn btn-primary">Verify email and continue</button>
+      </form>
+      {% else %}
+      <p class="login-help">Signup is currently paused. Existing users can still log in.</p>
+      {% endif %}
+      <p id="signup-status" role="status" aria-live="polite"></p>
+    </section>
+    <div class="terms-popup" id="terms-popup" hidden>
+      <div class="terms-popup-panel" role="dialog" aria-modal="true" aria-labelledby="terms-title">
+        <div class="terms-popup-head">
+          <h3 id="terms-title">Classarit terms and conditions</h3>
+          <button type="button" class="terms-close" data-terms-close aria-label="Close terms">×</button>
+        </div>
+        <div class="terms-popup-body">
+          <p>Classarit is provided as an early access teaching management tool. Information in the app is for organizing classes, schedules, students and workspace operations, and is not legal, tax, financial, medical or professional advice.</p>
+          <p>You are responsible for the accuracy of the information you enter, for getting any consent needed before adding another person’s information, and for using the service lawfully. Do not upload unlawful, harmful or sensitive information that you do not have permission to store.</p>
+          <p>The service may change, pause or lose availability during testing. Data may be corrected, removed or reset while the product is under development. Use your own records as the source of truth for payments, attendance and compliance until formal launch terms are published.</p>
+          <p>Classarit is provided without warranties during this demo period. To the extent allowed by law, liability is limited to stopping use of the service. Final commercial terms, privacy policy and compliance wording should be reviewed by a qualified attorney before public launch.</p>
+        </div>
+      </div>
+    </div>
+  </section>

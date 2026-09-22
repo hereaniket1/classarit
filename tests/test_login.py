@@ -39,7 +39,7 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         # Match hosted installations where citext already lives in public.
         subprocess.run(cmd+['-c','CREATE EXTENSION citext WITH SCHEMA public'],check=True,stdout=subprocess.DEVNULL)
         subprocess.run(cmd+['-f',str(ROOT/'setup/auth_schema.sql')],check=True,stdout=subprocess.DEVNULL)
-        for migration in ('001_workspaces_and_teaching.sql','002_account_types_and_single_owner.sql','003_owner_staff_separation.sql','004_recurring_session_series.sql','005_workspace_type_role_policy.sql','006_direct_scheduled_participants.sql','007_default_workspace.sql','008_notifications_otp_executive.sql'):
+        for migration in ('001_workspaces_and_teaching.sql','002_account_types_and_single_owner.sql','003_owner_staff_separation.sql','004_recurring_session_series.sql','005_workspace_type_role_policy.sql','006_direct_scheduled_participants.sql','007_default_workspace.sql','008_notifications_otp_executive.sql','009_exclusive_staff_roles.sql','010_password_login_and_profiles.sql','011_business_profiles_and_individual_limit.sql','012_terms_acceptance_audit.sql','013_google_profile_terms_events.sql'):
             for _ in range(2):
                 subprocess.run([sys.executable,str(ROOT/'setup/apply_migration.py'),migration],check=True,stdout=subprocess.DEVNULL)
         from app.main import app
@@ -77,7 +77,7 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         sent = []
         with patch('app.services.emailer.send_email', side_effect=lambda *args, **kwargs: sent.append((args, kwargs)) or {'id':'test'}), \
              patch('app.auth.repository.generate_otp', return_value='123456'):
-            started = self.client.post('/auth/register/start', json={'full_name':'New Owner','email':'new-owner@example.com'})
+            started = self.client.post('/auth/register/start', json={'full_name':'New Owner','email':'new-owner@example.com','accepted_terms':True})
             self.assertEqual(started.status_code, 200, started.text)
             self.assertEqual(len(sent), 1)
             verify = self.client.post('/auth/register/verify', json={'challenge_id':started.json()['challenge_id'],'code':'123456'})
@@ -93,13 +93,16 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         exec_client.__enter__(); self.addCleanup(exec_client.__exit__, None, None, None)
         exec_csrf = self.login(exec_client, 'aniket-exec', 'aniketpathak1@gmail.com')
         self.assertEqual(exec_client.get('/executive').status_code, 200)
+        executive_home = exec_client.get('/dashboard?overview=1')
+        self.assertIn('href="/executive"', executive_home.text)
+        self.assertIn('target="_blank"', executive_home.text)
         data = exec_client.get('/api/executive/dashboard')
         self.assertEqual(data.status_code, 200, data.text)
         self.assertIn('api', data.json())
         changed = exec_client.patch('/api/executive/settings', headers={'X-CSRF-Token':exec_csrf}, json={'google_new_accounts_enabled':False,'signup_enabled':False,'notification_emails_enabled':False})
         self.assertEqual(changed.status_code, 200, changed.text)
         self.assertFalse(changed.json()['settings']['google_new_accounts_enabled'])
-        self.assertEqual(self.client.post('/auth/register/start', json={'full_name':'Blocked','email':'blocked@example.com'}).status_code, 403)
+        self.assertEqual(self.client.post('/auth/register/start', json={'full_name':'Blocked','email':'blocked@example.com','accepted_terms':True}).status_code, 403)
         self.login(existing, 'existing-google', 'existing@example.com')
         newcomer = self.client_type(self.app, base_url='http://127.0.0.1:8000')
         newcomer.__enter__(); self.addCleanup(newcomer.__exit__, None, None, None)
@@ -116,6 +119,7 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         with patch.object(oauth.google,'load_server_metadata',new=AsyncMock(return_value=metadata)):
             for origin in ['http://127.0.0.1:8000','http://localhost:8000','https://myremote.example.com']:
                 with self.client_type(self.app,base_url=origin) as client:
+                    self.assertEqual(client.post('/auth/terms/accept',json={'accepted_terms':True}).status_code,200)
                     response=client.get('/auth/google/login',follow_redirects=False)
                     query=parse_qs(urlsplit(response.headers['location']).query)
                     self.assertEqual(query['redirect_uri'],[origin+'/auth/google/callback'])
@@ -123,11 +127,13 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
             # Render terminates TLS before forwarding to Uvicorn.
             proxied=ProxyHeadersMiddleware(self.app,trusted_hosts=['testclient'])
             with self.client_type(proxied,base_url='http://myremote.example.com') as client:
+                self.assertEqual(client.post('/auth/terms/accept',json={'accepted_terms':True}).status_code,200)
                 response=client.get('/auth/google/login',headers={'X-Forwarded-Proto':'https'},follow_redirects=False)
                 query=parse_qs(urlsplit(response.headers['location']).query)
                 self.assertEqual(query['redirect_uri'],['https://myremote.example.com/auth/google/callback'])
                 self.assertIn('; secure',response.headers['set-cookie'].lower())
             with self.client_type(self.app,base_url='http://myremote.example.com') as client:
+                self.assertEqual(client.post('/auth/terms/accept',json={'accepted_terms':True}).status_code,200)
                 self.assertEqual(client.get('/auth/google/login').status_code,400)
 
     def test_generated_key_persists_without_required_environment(self):
@@ -181,6 +187,7 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
             'token_endpoint':'https://oauth2.googleapis.com/token',
             'jwks_uri':'https://www.googleapis.com/oauth2/v3/certs',
             'id_token_signing_alg_values_supported':['RS256']}
+        self.assertEqual(self.client.post('/auth/terms/accept',json={'accepted_terms':True}).status_code,200)
         with patch.object(oauth.google,'load_server_metadata',new=AsyncMock(return_value=metadata)):
             response=self.client.get('/auth/google/login',follow_redirects=False)
             query=parse_qs(urlsplit(response.headers['location']).query)
@@ -193,10 +200,20 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
             with patch.object(oauth.google,'fetch_access_token',new=AsyncMock(return_value={'id_token':encoded,'access_token':'test'})), patch.object(oauth.google,'fetch_jwk_set',new=AsyncMock(return_value={'keys':[key.as_dict(private=False)]})):
                 callback=self.client.get('/auth/google/callback',params={'state':query['state'][0],'code':'test-code'})
                 self.assertEqual(callback.status_code,200,callback.text)
-                self.assertTrue(self.client.get('/auth/me').json()['authenticated'])
+                me = self.client.get('/auth/me').json()
+                self.assertTrue(me['authenticated'])
+                self.assertEqual(me.get('next_url'), '/auth/google/profile')
+                profile_page = self.client.get('/auth/google/profile')
+                self.assertEqual(profile_page.status_code, 200)
+                blocked = self.client.post('/auth/google/profile', json={'full_name':'Signed user','phone':'','accepted_terms':False})
+                self.assertEqual(blocked.status_code, 422)
+                completed = self.client.post('/auth/google/profile', json={'full_name':'Signed user','phone':'','accepted_terms':True})
+                self.assertEqual(completed.status_code, 200, completed.text)
+                self.assertNotIn('next_url', self.client.get('/auth/me').json())
                 # Replayed state must fail, even with a valid token.
                 replay=self.client.get('/auth/google/callback',params={'state':query['state'][0],'code':'test-code'})
                 self.assertEqual(replay.status_code,400)
+            self.assertEqual(self.client.post('/auth/terms/accept',json={'accepted_terms':True}).status_code,200)
             response=self.client.get('/auth/google/login',follow_redirects=False)
             query=parse_qs(urlsplit(response.headers['location']).query)
             wrong=jwt.encode({'alg':'RS256','kid':key.kid},{**claims,'nonce':'wrong'},key)
@@ -204,16 +221,125 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
                 self.assertEqual(self.client.get('/auth/google/callback',params={'state':query['state'][0],'code':'test-code'}).status_code,400)
 
     def test_duplicate_identity_and_email_collision(self):
-        from app.auth.repository import google_account,LinkingRequired,AccountUnavailable
+        from app.auth.repository import google_account,AccountUnavailable
+        from app.auth.database import auth_engine
+        from sqlalchemy import text
         claims={'sub':'one','email':'same@example.com','email_verified':True}
         first=google_account(claims)
         self.assertEqual(first['id'],google_account(claims)['id'])
-        with self.assertRaises(LinkingRequired):
-            google_account({**claims,'sub':'two'})
+        linked=google_account({**claims,'sub':'two'})
+        self.assertEqual(first['id'], linked['id'])
+        with auth_engine().connect() as conn:
+            identities=conn.execute(text("SELECT count(*) FROM classarit.auth_identities WHERE app_user_id=:u"), {'u':first['id']}).scalar_one()
+        self.assertEqual(identities,2)
         with self.assertRaises(AccountUnavailable):
             google_account({**claims,'email_verified':False})
         with self.assertRaises(AccountUnavailable):
             google_account({**claims,'sub':None})
+
+    def test_password_signup_profile_login_and_optional_email_verification(self):
+        from app.auth.database import auth_engine
+        from sqlalchemy import text
+
+        sent=[]
+        with patch('app.services.emailer.send_email', side_effect=lambda *args, **kwargs: sent.append((args, kwargs)) or {'id':'test'}), \
+             patch('app.auth.repository.generate_otp', return_value='654321'):
+            started=self.client.post('/auth/password/register',json={
+                'full_name':'Password User','phone':'+91 9876543210',
+                'email':'password@example.com','password':'correct horse battery staple',
+                'accepted_terms':True,
+            })
+            self.assertEqual(started.status_code,200,started.text)
+            self.assertTrue(started.json()['verification_required'])
+            self.assertEqual(len(sent),1)
+            self.assertFalse(self.client.get('/auth/me').json()['authenticated'])
+            retried=self.client.post('/auth/password/register',json={
+                'full_name':'Password User','phone':'+91 9876543210',
+                'email':'password@example.com','password':'correct horse battery staple',
+                'accepted_terms':True,
+            })
+            self.assertEqual(retried.status_code,200,retried.text)
+            self.assertEqual(len(sent),2)
+            verified=self.client.post('/auth/password/register/verify',json={
+                'challenge_id':retried.json()['challenge_id'],'code':'654321',
+            })
+            self.assertEqual(verified.status_code,200,verified.text)
+
+        profile=self.client.get('/profile')
+        self.assertEqual(profile.status_code,200,profile.text)
+        self.assertIn('Verified',profile.text)
+        csrf=re.search(r'name="csrf-token" content="([^"]+)"',profile.text).group(1)
+        updated=self.client.patch('/api/account/profile',headers={'X-CSRF-Token':csrf},json={
+            'full_name':'Password User Updated','phone':'+91 9000000000',
+            'date_of_birth':'2000-01-02','country':'India',
+        })
+        self.assertEqual(updated.status_code,200,updated.text)
+        self.assertEqual(updated.json()['country'],'India')
+        self.client.post('/auth/logout',data={'csrf_token':csrf})
+        self.assertEqual(self.client.post('/auth/password/login',json={
+            'email':'password@example.com','password':'wrong password',
+        }).status_code,401)
+        logged_in=self.client.post('/auth/password/login',json={
+            'email':'PASSWORD@example.com','password':'correct horse battery staple',
+        })
+        self.assertEqual(logged_in.status_code,200,logged_in.text)
+        with auth_engine().connect() as conn:
+            row=conn.execute(text("""SELECT u.phone,u.date_of_birth,u.country,e.verified_at,p.password_hash
+                FROM classarit.app_users u JOIN classarit.user_emails e ON e.app_user_id=u.id
+                JOIN classarit.password_credentials p ON p.app_user_id=u.id
+                WHERE e.email='password@example.com'""")).mappings().one()
+        self.assertEqual(row['country'],'India')
+        self.assertIsNotNone(row['verified_at'])
+        self.assertTrue(row['password_hash'].startswith('$argon2id$'))
+
+        from app.services.product_settings import set_settings
+        settings=set_settings({'email_verification_enabled':False},None)
+        self.assertFalse(settings['email_verification_enabled'])
+        unverified=self.client_type(self.app,base_url='http://127.0.0.1:8000')
+        unverified.__enter__();self.addCleanup(unverified.__exit__,None,None,None)
+        created=unverified.post('/auth/password/register',json={
+            'full_name':'Quick Signup','phone':'5551234567','email':'quick@example.com',
+            'password':'a sufficiently long password','accepted_terms':True,
+        })
+        self.assertEqual(created.status_code,200,created.text)
+        self.assertFalse(created.json()['verification_required'])
+        self.assertTrue(unverified.get('/auth/me').json()['authenticated'])
+        self.assertIn('Unverified',unverified.get('/profile').text)
+
+    def test_student_verification_uses_parent_email_for_a_minor(self):
+        self.ws_setup()
+        minor=self.post('/students',{
+            'full_name':'Minor Learner','date_of_birth':'2016-01-02',
+            'guardian_name':'Alice Parent','guardian_email':'alice@example.com',
+        })
+        adult=self.post('/students',{
+            'full_name':'Adult Learner','date_of_birth':'1990-01-02',
+            'email':'alice@example.com',
+        })
+        unknown=self.post('/students',{'full_name':'Unverified Learner'})
+        students={row['id']:row for row in self.client.get(self.base+'/section/students').json()['students']}
+        self.assertTrue(students[minor['id']]['is_verified'])
+        self.assertEqual(students[minor['id']]['verification_source'],'PARENT_EMAIL')
+        self.assertTrue(students[adult['id']]['is_verified'])
+        self.assertEqual(students[adult['id']]['verification_source'],'STUDENT_EMAIL')
+        self.assertFalse(students[unknown['id']]['is_verified'])
+
+        invitation=self.post('/invitations',{'email':'bob@example.com','roles':['TEACHER']})
+        teacher,teacher_headers=self.another_user('bob')
+        accepted=teacher.post(
+            '/api/invitations/'+invitation['url'].rsplit('/',1)[1]+'/accept',
+            headers=teacher_headers,
+        )
+        self.assertEqual(accepted.status_code,200,accepted.text)
+        teacher_member=teacher.get(self.base+'/snapshot').json()['membership_id']
+        program=self.new_program('Minor class',teacher_ids=[teacher_member])
+        self.new_session(program,student_ids=[minor['id']])
+        teacher_view=teacher.get(self.base+'/section/sessions')
+        self.assertEqual(teacher_view.status_code,200,teacher_view.text)
+        visible=teacher_view.json()['students']
+        self.assertEqual([row['id'] for row in visible],[minor['id']])
+        self.assertTrue(visible[0]['is_verified'])
+        self.assertEqual(visible[0]['verification_source'],'PARENT_EMAIL')
 
     def test_blocked_and_expired_sessions(self):
         from app.auth.database import auth_engine

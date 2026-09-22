@@ -11,7 +11,9 @@
   <link rel="stylesheet" href="/static/workspace.css">
   <link rel="stylesheet" href="/static/account-dashboard.css">
   <link rel="stylesheet" href="/static/executive.css">
-  <script type="module" src="/static/executive.js"></script>
+  <link rel="stylesheet" href="/static/responsive.css?v=password-profile-20260917">
+  <script src="/static/loading.js?v=password-profile-20260917" defer></script>
+  <script type="module" src="/static/executive.js?v=password-profile-20260917"></script>
 </head>
 <body>
 <div class="workspace-shell executive-shell">
@@ -21,24 +23,37 @@
       <span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span>
       <span><strong>{{ user.full_name or 'Executive' }}</strong><small>EXECUTIVE</small></span>
     </a>
-    <nav aria-label="Executive navigation"><a class="account-nav active" href="/executive">Product dashboard</a></nav>
+    <nav aria-label="Executive navigation"><a class="account-nav active" href="/executive">Product dashboard</a><a class="account-nav" href="/profile">Profile</a></nav>
     <div class="workspace-footer"><button type="button" id="logout">Log out</button></div>
   </aside>
   <main class="workspace-main executive-main">
     <div id="notice" role="status" aria-live="polite" hidden></div>
     <header class="section-heading account-heading"><h1>Executive dashboard</h1><a class="btn btn-outline-primary" href="/dashboard?overview=1">Business dashboard</a></header>
     <section class="metric-grid executive-metrics" id="registration-metrics" aria-label="Registration metrics"></section>
-    <section class="workspace-card executive-card">
+    <section class="workspace-card executive-card" id="executive-settings-card">
       <div class="section-heading"><h2>Product controls</h2><p class="subtext">Changes apply immediately.</p></div>
       <div class="setting-grid" id="settings-grid"></div>
     </section>
-    <section class="workspace-card executive-card">
+    <section class="workspace-card executive-card" id="executive-latency-card">
       <div class="section-heading"><h2>API latency · last 7 days</h2><p class="subtext" id="api-total"></p></div>
       <div class="latency-chart" id="latency-chart"></div>
     </section>
-    <section class="workspace-card executive-card">
+    <section class="workspace-card executive-card" id="executive-routes-card">
       <div class="section-heading"><h2>Slowest routes</h2></div>
       <div class="table-scroll"><table class="workspace-table"><thead><tr><th>Route</th><th>Calls</th><th>Avg</th><th>Max</th></tr></thead><tbody id="route-table"></tbody></table></div>
+    </section>
+    <section class="workspace-card executive-card danger-zone" id="executive-danger-card">
+      <div class="section-heading">
+        <div><h2>Temporary reset</h2><p class="subtext">Deletes app, login, token, workspace and telemetry data. Migration history and terms audit records stay intact.</p></div>
+      </div>
+      <form id="flush-data-form" class="danger-form">
+        <label>Confirmation<input class="form-control" name="confirmation" autocomplete="off" placeholder="DELETE ALL DATA" required></label>
+        <button type="submit" class="btn btn-danger" disabled>Delete every data</button>
+      </form>
+      <form id="delete-terms-form" class="danger-form terms-audit-form">
+        <label>Terms audit confirmation<input class="form-control" name="confirmation" autocomplete="off" placeholder="DELETE TERMS AUDIT" required></label>
+        <button type="submit" class="btn btn-outline-danger" disabled>Delete terms audit records</button>
+      </form>
     </section>
   </main>
 </div>

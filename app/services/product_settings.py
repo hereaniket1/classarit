@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 DEFAULTS = {
     "google_new_accounts_enabled": True,
     "signup_enabled": True,
+    "email_verification_enabled": True,
     "notification_emails_enabled": True,
 }
 

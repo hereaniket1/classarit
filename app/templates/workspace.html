@@ -13,10 +13,11 @@
     <link rel="stylesheet" href="/static/styles.css" />
     <link rel="stylesheet" href="/static/workspace.css" />
     <link rel="stylesheet" href="/static/account-dashboard.css" />
-    <script type="module" src="/static/workspaces/main.js?v=workspace-reporting-20260915"></script>
-    <link rel="stylesheet" href="/static/responsive.css">
+    <script src="/static/loading.js?v=password-profile-20260917" defer></script>
+    <script type="module" src="/static/workspaces/main.js?v=password-profile-20260917"></script>
+    <link rel="stylesheet" href="/static/responsive.css?v=password-profile-20260917">
   <script src="/static/responsive.js" defer></script>
-    <link rel="stylesheet" href="/static/workspace-compact.css?v=workspace-reporting-20260915">
+    <link rel="stylesheet" href="/static/workspace-compact.css?v=password-profile-20260917">
 </head>
   <body
     data-workspace="{{ workspace.id if workspace else '' }}"
@@ -31,21 +32,22 @@
         >
         <a class="account-profile" href="/dashboard?overview=1" aria-label="Open main dashboard">
           <span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span>
-          <span><strong>{{ user.full_name or 'My account' }}</strong><small>{{ user.user_type }}</small></span>
+          <span><strong>{{ user.full_name or 'My account' }}</strong><small>{{ display_role }}</small></span>
         </a>
         {% if workspace %}
 
         <nav aria-label="Workspace sections">
           {% if teacher_only %}
-            {% set sections = [('classes','My classes'),('sessions','My schedule & attendance')] %}
+            {% set sections = [('classes','My classes'),('sessions','My schedule & attendance'),('settings','Settings')] %}
           {% else %}
-            {% set sections = [('calendar','Calendar'),('classes','Classes & events'),('students','Students'),('sessions','Schedule & attendance'),('venues','Venues'),('team','Team'),('makeups','Makeup classes')] %}{% if owner_view %}{% set sections = sections + [('reporting','Reporting')] %}{% endif %}
+            {% set sections = [('calendar','Calendar'),('classes','Classes & events'),('students','Students'),('sessions','Schedule & attendance'),('venues','Venues')] %}{% if owner_view %}{% set sections = sections + [('reporting','Reporting')] %}{% endif %}{% set sections = sections + [('settings','Settings')] %}
           {% endif %}
-          {% for key,title in sections %}<button type="button" data-tab="{{ key }}" title="{{ title }}">{{ icon({'calendar':'calendar','classes':'classes','students':'students','sessions':'calendar','venues':'venue','team':'teachers','makeups':'makeup','reporting':'reporting'}[key]) }}<span>{{ title }}</span></button>{% endfor %}
+          {% for key,title in sections %}<button type="button" data-tab="{{ key }}" title="{{ title }}">{{ icon({'calendar':'calendar','classes':'classes','students':'students','sessions':'calendar','venues':'venue','reporting':'reporting','settings':'gear'}[key]) }}<span>{{ title }}</span></button>{% endfor %}
         </nav>
         {% endif %}
         <div class="workspace-footer">
-
+          <a class="account-nav" href="/profile" title="Open your profile">Profile</a>
+          {% if executive_access %}<a class="account-nav executive-link" href="/executive" target="_blank" rel="noopener" title="Open Executive dashboard in a new tab">Executive dashboard ↗</a>{% endif %}
           <button type="button" id="logout">Log out</button>
         </div>
       </aside>
@@ -56,6 +58,20 @@
             <div class="workspace-title-row">
               <h1>{{ workspace.name if workspace else 'Welcome to Classarit' }}</h1>
               {% if workspace %}
+              {% if not teacher_only %}
+              <div class="quick-actions" role="group" aria-label="Quick add">
+                <span class="quick-actions-label">Quick add</span>
+                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="student" aria-label="Add student" title="Add student" disabled>
+                  {{ icon('students') }}<span>Student</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="program" aria-label="Create class or event" title="Create class or event" disabled>
+                  {{ icon('classes') }}<span>Class / event</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="session" aria-label="Schedule classes" title="Schedule classes" disabled>
+                  {{ icon('calendar') }}<span>Schedule</span>
+                </button>
+              </div>
+              {% endif %}
               <label class="workspace-picker"><span>Switch workspace</span>
                 {{ icon('workspaces') }}
                 <select id="workspace-picker" aria-label="Switch workspace" title="Switch workspace">
@@ -88,8 +104,8 @@
         <section class="workspace-card onboarding">
           <h2>Set up your teaching space</h2>
           <p>
-            You can create more workspaces later. Each has its own team,
-            students and schedule.
+            Individual teachers use one workspace. Companies and institutes can
+            create multiple workspaces under one business profile.
           </p>
           <form id="onboarding-form">
             <label
@@ -102,34 +118,107 @@
             ><label
               >I’m setting up<select class="form-select" name="workspace_type">
                 <option value="INDIVIDUAL">
-                  My individual teaching business
+                  Independent teacher
                 </option>
-                <option value="INSTITUTE">An institute or company</option>
+                <option value="INSTITUTE">Company or organization</option>
               </select></label
             >
+            <div id="business-profile-fields" hidden>
+              <label
+                >Legal business name<input
+                  class="form-control"
+                  name="business_legal_name"
+                  maxlength="200"
+                  placeholder="e.g. Shanatrika Music Academy" /></label
+              >
+              <div class="form-grid">
+                <label
+                  >Unique business identification number<input
+                    class="form-control"
+                    name="business_gstin"
+                    maxlength="30"
+                    pattern="[0-9A-Z-]{6,30}"
+                    placeholder="GSTN/GSTIN for India" /></label
+                ><label
+                  >Government ID number<input
+                    class="form-control"
+                    name="owner_aadhaar_number"
+                    maxlength="30"
+                    pattern="[0-9A-Z-]{6,30}"
+                    placeholder="Owner Aadhaar for India" /></label
+                >
+              </div>
+              <label
+                >Address<input
+                  class="form-control"
+                  name="business_address_line1"
+                  maxlength="250"
+                  placeholder="Street address" /></label
+              >
+              <label
+                >Address line 2<input
+                  class="form-control"
+                  name="business_address_line2"
+                  maxlength="250"
+                  placeholder="Area, landmark or suite" /></label
+              >
+              <div class="form-grid">
+                <label
+                  >City<input class="form-control" name="business_city" maxlength="120" /></label
+                ><label
+                  >State<input class="form-control" name="business_state" maxlength="120" /></label
+                >
+              </div>
+              <div class="form-grid">
+                <label
+                  >Postal code<input class="form-control" name="business_postal_code" maxlength="20" /></label
+                ><label
+                  >Country<select class="form-select" name="business_country" required>
+                    <option value="IN" selected>India</option>
+                    <option value="US">United States</option>
+                    <option value="CA">Canada</option>
+                    <option value="GB">United Kingdom</option>
+                    <option value="AU">Australia</option>
+                    <option value="AE">United Arab Emirates</option>
+                    <option value="SG">Singapore</option>
+                  </select></label
+                >
+              </div>
+            </div>
             <div class="form-grid">
               <label
-                >Timezone<input
-                  class="form-control"
-                  name="timezone"
-                  value="Asia/Kolkata"
-                  required /></label
+                >Timezone<select class="form-select" name="timezone" required>
+                  <option value="Asia/Kolkata" selected>India - Asia/Kolkata</option>
+                  <option value="Asia/Dubai">UAE - Asia/Dubai</option>
+                  <option value="Asia/Singapore">Singapore - Asia/Singapore</option>
+                  <option value="Europe/London">UK - Europe/London</option>
+                  <option value="America/New_York">US Eastern - America/New_York</option>
+                  <option value="America/Chicago">US Central - America/Chicago</option>
+                  <option value="America/Los_Angeles">US Pacific - America/Los_Angeles</option>
+                  <option value="Australia/Sydney">Australia - Australia/Sydney</option>
+                </select></label
               ><label
-                >Currency<input
-                  class="form-control"
-                  name="currency"
-                  value="INR"
-                  pattern="[A-Z]{3}"
-                  maxlength="3"
-                  required
-              /></label>
+                >Currency<select class="form-select" name="currency" required>
+                  <option value="INR" selected>INR - Indian rupee</option>
+                  <option value="USD">USD - US dollar</option>
+                  <option value="CAD">CAD - Canadian dollar</option>
+                  <option value="GBP">GBP - British pound</option>
+                  <option value="AUD">AUD - Australian dollar</option>
+                  <option value="AED">AED - UAE dirham</option>
+                  <option value="SGD">SGD - Singapore dollar</option>
+                </select></label>
             </div>
             <button class="btn btn-primary">Create workspace</button>
           </form>
         </section>
         {% else %}
-        <div id="workspace-content" aria-live="polite">
-          <p>Loading your workspace…</p>
+        <div id="workspace-content" aria-live="polite" aria-busy="true">
+          <div class="skeleton-page" role="status" aria-live="polite">
+            <span class="loading-announcement">Loading workspace…</span>
+            <div class="skeleton-page-title" aria-hidden="true"><span class="skeleton-block skeleton-line skeleton-line-medium"></span></div>
+            <div class="skeleton-metric-grid" aria-hidden="true">{% for _ in range(4) %}<div class="skeleton-metric"><span class="skeleton-block skeleton-icon"></span><div><span class="skeleton-block skeleton-line skeleton-line-short"></span><span class="skeleton-block skeleton-line skeleton-line-medium"></span></div></div>{% endfor %}</div>
+            <div class="skeleton-content-grid" aria-hidden="true">{% for _ in range(2) %}<section class="skeleton-card"><div class="skeleton-card-title"><span class="skeleton-block skeleton-line skeleton-line-medium"></span><span class="skeleton-block skeleton-line skeleton-line-short"></span></div>{% for _ in range(4) %}<div class="skeleton-row"><span class="skeleton-block skeleton-avatar"></span><div><span class="skeleton-block skeleton-line skeleton-line-long"></span><span class="skeleton-block skeleton-line skeleton-line-short"></span></div><span class="skeleton-block skeleton-button"></span></div>{% endfor %}</section>{% endfor %}</div>
+          </div>
         </div>
         {% endif %}
       </main>

@@ -10,12 +10,30 @@ from ..workspaces.db import transaction
 from ..workspaces.access import access, MANAGERS
 from ..workspaces.services.organizations import memberships
 from ..workspaces.services.overview import dashboard_data
+from ..services.product_settings import setting_enabled
 
 router = APIRouter()
 
 
 class DefaultWorkspaceInput(BaseModel):
     workspace_id: UUID
+
+
+ROLE_PRIORITY = ("OWNER", "ADMIN", "OPERATOR", "TEACHER", "STUDENT")
+
+
+def role_label(db, user, choices=None):
+    choices = choices if choices is not None else memberships(db, user)
+    roles = {role for choice in choices for role in (choice.get("roles") or [])}
+    if db.first(
+        "SELECT 1 FROM {s}.students WHERE linked_user_id=:u AND status='ACTIVE' LIMIT 1",
+        u=user["id"],
+    ):
+        roles.add("STUDENT")
+    return next(
+        (role for role in ROLE_PRIORITY if role in roles),
+        user.get("user_type") or "MEMBER",
+    )
 
 
 
@@ -27,6 +45,9 @@ def context(request, user, **extra):
         "workspaces": [],
         "workspace": None,
         "invitation": None,
+        "display_role": user.get("user_type") or "MEMBER",
+        "executive_access": (user.get("email") or "").lower()
+        == "aniketpathak1@gmail.com",
         **extra,
     }
 
@@ -35,6 +56,8 @@ def context(request, user, **extra):
 def dashboard(
     request: Request, user=Depends(require_dashboard_user), db=Depends(transaction)
 ):
+    if request.session.get("google_profile_required"):
+        return RedirectResponse("/auth/google/profile", 303)
     if user["user_type"] == "APPOWNER":
         return templates.TemplateResponse(
             "account_dashboard.html", context(request, user, appowner=True)
@@ -52,6 +75,7 @@ def dashboard(
             raise HTTPException(404, "Workspace not found.")
         return RedirectResponse(f"/workspaces/{selected}", 303)
     choices = memberships(db, user)
+    display_role = role_label(db, user, choices)
     wants_overview = request.query_params.get("overview") in {"1", "true", "yes"}
     if not wants_overview:
         default_workspace_id = user.get("default_workspace_id")
@@ -63,7 +87,33 @@ def dashboard(
             return RedirectResponse(f"/workspaces/{choices[0]['id']}", 303)
     return templates.TemplateResponse(
         "account_dashboard.html",
-        context(request, user, appowner=False, **dashboard_data(db, user)),
+        context(
+            request,
+            user,
+            appowner=False,
+            display_role=display_role,
+            **dashboard_data(db, user),
+        ),
+    )
+
+
+@router.get("/profile", response_class=HTMLResponse)
+def profile(
+    request: Request,
+    user=Depends(require_dashboard_user),
+    db=Depends(transaction),
+):
+    choices = [] if user.get("user_type") == "APPOWNER" else memberships(db, user)
+    return templates.TemplateResponse(
+        "profile.html",
+        context(
+            request,
+            user,
+            display_role=role_label(db, user, choices),
+            email_verification_enabled=setting_enabled(
+                "email_verification_enabled", True
+            ),
+        ),
     )
 
 
@@ -77,7 +127,13 @@ def onboarding(request: Request, user=Depends(require_user), db=Depends(transact
             403, "Invited staff accounts can only access their assigned workspaces."
         )
     return templates.TemplateResponse(
-        "workspace.html", context(request, user, teacher_only=False)
+        "workspace.html",
+        context(
+            request,
+            user,
+            teacher_only=False,
+            display_role=role_label(db, user, choices),
+        ),
     )
 
 
@@ -93,6 +149,9 @@ def workspace_page(request: Request, a=Depends(access)):
             workspaces=memberships(a.db, a.user),
             teacher_only=teacher_only,
             owner_view="OWNER" in a.roles,
+            display_role=next(
+                (role for role in ROLE_PRIORITY if role in a.roles), "MEMBER"
+            ),
         ),
     )
 

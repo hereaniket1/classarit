@@ -1,6 +1,6 @@
 /** Month calendar uses workspace-local dates and API-loaded monthly sessions. */
-import { esc } from "./api.js?v=workspace-reporting-20260915";
-import { icon } from "./icons.js?v=workspace-reporting-20260915";
+import { esc } from "./api.js?v=password-profile-20260917";
+import { icon } from "./icons.js?v=password-profile-20260917";
 
 const INLINE_SLOT_LIMIT = 2;
 const calendarState = { monthKey: "", monthData: null, loading: false };
@@ -162,7 +162,7 @@ export function renderCalendar(s) {
         ? `<button type="button" class="calendar-day ${d.state}${d.today ? " today" : ""}" data-calendar-day="${d.key}" aria-label="${esc(dayLabel(d.key))}: ${d.sessions.length} scheduled classes"><strong>${esc(dayNumber(d.key))}</strong><small>${d.past ? `${d.sessions.length ? `${d.sessions.length} class${d.sessions.length === 1 ? "" : "es"}` : "Past day"}` : d.sessions.length ? `${d.sessions.length} class${d.sessions.length === 1 ? "" : "es"}` : "Free day"}</small>${d.sessions.slice(0, INLINE_SLOT_LIMIT).map((x) => `<span class="busy-slot">${esc(slot(x, d.key, zone))}</span>`).join("")}${d.sessions.length > INLINE_SLOT_LIMIT ? `<small>+${d.sessions.length - INLINE_SLOT_LIMIT} more</small>` : ""}</button>`
         : '<span class="calendar-blank" aria-hidden="true"></span>',
     )
-    .join("")}</div><div class="calendar-loader" role="status" aria-live="polite"><span class="calendar-spinner" aria-hidden="true"></span><strong>Loading calendar</strong><small>Please wait while the latest schedule loads.</small></div></div></section>`;
+    .join("")}</div><div class="calendar-loader">${window.ClassaritLoading?.calendar("calendar") || '<p role="status">Loading calendar…</p>'}</div></div></section>`;
 }
 
 function closeCalendarPopup() {

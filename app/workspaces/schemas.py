@@ -14,6 +14,66 @@ class WorkspaceInput(Input):
     workspace_type: Literal["INDIVIDUAL", "INSTITUTE"]
     timezone: str = "Asia/Kolkata"
     currency: str = Field(default="INR", pattern=r"^[A-Z]{3}$")
+    business_legal_name: str | None = Field(default=None, max_length=200)
+    business_gstin: str | None = Field(default=None, min_length=6, max_length=30, pattern=r"^[0-9A-Z-]+$")
+    owner_aadhaar_number: str | None = Field(default=None, min_length=6, max_length=30, pattern=r"^[0-9A-Z-]+$")
+    business_address_line1: str | None = Field(default=None, max_length=250)
+    business_address_line2: str | None = Field(default=None, max_length=250)
+    business_city: str | None = Field(default=None, max_length=120)
+    business_state: str | None = Field(default=None, max_length=120)
+    business_postal_code: str | None = Field(default=None, max_length=20)
+    business_country: str = Field(default="IN", min_length=2, max_length=2)
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value):
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError:
+            raise ValueError("Choose a valid IANA timezone, such as Asia/Kolkata.")
+        return value
+
+    @field_validator("business_gstin", mode="before")
+    @classmethod
+    def uppercase_gstin(cls, value):
+        return value.upper() if value else value
+
+    @field_validator("business_country", mode="before")
+    @classmethod
+    def uppercase_country(cls, value):
+        return value.upper()
+
+
+class InviteInput(Input):
+    email: str = Field(
+        min_length=3, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
+    )
+    roles: list[Literal["ADMIN", "OPERATOR", "TEACHER"]] = Field(min_length=1)
+
+    @field_validator("roles")
+    @classmethod
+    def one_staff_role(cls, value):
+        if len(set(value)) != 1:
+            raise ValueError("Choose exactly one role: Admin, Operator or Teacher.")
+        return value
+
+
+class MemberInput(Input):
+    roles: list[Literal["ADMIN", "OPERATOR", "TEACHER"]] = Field(default_factory=list)
+    status: Literal["ACTIVE", "SUSPENDED", "LEFT"] = "ACTIVE"
+
+    @field_validator("roles")
+    @classmethod
+    def one_staff_role(cls, value):
+        if len(set(value)) > 1:
+            raise ValueError("Admin, Operator and Teacher are separate roles.")
+        return value
+
+
+class WorkspaceUpdateInput(Input):
+    name: str = Field(min_length=1, max_length=150)
+    timezone: str
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
 
     @field_validator("timezone")
     @classmethod
@@ -25,16 +85,8 @@ class WorkspaceInput(Input):
         return value
 
 
-class InviteInput(Input):
-    email: str = Field(
-        min_length=3, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
-    )
-    roles: list[Literal["ADMIN", "OPERATOR", "TEACHER"]] = Field(min_length=1)
-
-
-class MemberInput(Input):
-    roles: list[Literal["ADMIN", "OPERATOR", "TEACHER"]] = Field(default_factory=list)
-    status: Literal["ACTIVE", "SUSPENDED", "LEFT"] = "ACTIVE"
+class WorkspaceDeleteInput(Input):
+    confirmation: str = Field(min_length=1, max_length=150)
 
 
 class ActivityInput(Input):
@@ -52,6 +104,7 @@ class VenueInput(Input):
 
 class StudentInput(Input):
     full_name: str = Field(min_length=1, max_length=150)
+    date_of_birth: date | None = None
     email: str | None = None
     phone: str | None = None
     notes: str | None = None
@@ -69,6 +122,7 @@ class ProgramInput(Input):
     teaching_format: Literal["ONE_TO_ONE", "GROUP"] = "GROUP"
     capacity: int = Field(default=10, gt=0, le=10000)
     level: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
     default_duration_minutes: int = Field(default=60, gt=0, le=1440)
     default_delivery_mode: Literal["ONLINE", "IN_PERSON", "HYBRID"] = "ONLINE"
     default_meeting_url: str | None = None

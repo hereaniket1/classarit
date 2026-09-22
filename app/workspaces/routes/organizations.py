@@ -3,7 +3,14 @@ from fastapi import APIRouter, Depends, Request, HTTPException, Query, Backgroun
 from ...auth.dependencies import require_user
 from ..db import transaction
 from ..access import access
-from ..schemas import WorkspaceInput, InviteInput, MemberInput, PolicyInput
+from ..schemas import (
+    WorkspaceInput,
+    WorkspaceUpdateInput,
+    WorkspaceDeleteInput,
+    InviteInput,
+    MemberInput,
+    PolicyInput,
+)
 from ..services import organizations, queries, makeups, overview
 from ...services import notifications
 
@@ -18,6 +25,16 @@ def listing(db=Depends(transaction), user=Depends(require_user)):
 @router.post("/workspaces", status_code=201)
 def create(p: WorkspaceInput, db=Depends(transaction), user=Depends(require_user)):
     return organizations.create_workspace(db, user, p)
+
+
+@router.patch("/workspaces/{workspace_id}")
+def update_workspace(p: WorkspaceUpdateInput, a=Depends(access)):
+    return organizations.update_workspace(a, p)
+
+
+@router.delete("/workspaces/{workspace_id}")
+def delete_workspace(p: WorkspaceDeleteInput, a=Depends(access)):
+    return organizations.delete_workspace(a, p)
 
 
 @router.post("/invitations/{token}/accept")
@@ -97,6 +114,25 @@ def member(member_id: UUID, p: MemberInput, background_tasks: BackgroundTasks, a
             else:
                 change = "Your teacher access was updated."
             notifications.send_staff_change(background_tasks, before["email"], a.workspace["name"], before.get("full_name"), change)
+    return result
+
+
+@router.delete("/workspaces/{workspace_id}/members/{member_id}")
+def remove_member(
+    member_id: UUID,
+    background_tasks: BackgroundTasks,
+    a=Depends(access),
+):
+    before = organizations.member_contact(a, member_id)
+    result = organizations.remove_member(a, member_id)
+    if before and before.get("email"):
+        notifications.send_staff_change(
+            background_tasks,
+            before["email"],
+            a.workspace["name"],
+            before.get("full_name"),
+            "Your workspace access was removed.",
+        )
     return result
 
 

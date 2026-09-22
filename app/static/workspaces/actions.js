@@ -1,8 +1,27 @@
-import { api, notice } from "./api.js?v=workspace-reporting-20260915";
-import { edit, field as f } from "./forms.js?v=workspace-reporting-20260915";
+import { api, notice } from "./api.js?v=password-profile-20260917";
+import { edit, field as f } from "./forms.js?v=password-profile-20260917";
 export function action(s, key, id, refresh, context = {}) {
   const opts = (values) =>
     values.map((v) => ({ id: v, name: v.replaceAll("_", " ") }));
+  const timezoneOptions = [
+    ["Asia/Kolkata", "India - Asia/Kolkata"],
+    ["Asia/Dubai", "UAE - Asia/Dubai"],
+    ["Asia/Singapore", "Singapore - Asia/Singapore"],
+    ["Europe/London", "UK - Europe/London"],
+    ["America/New_York", "US Eastern - America/New_York"],
+    ["America/Chicago", "US Central - America/Chicago"],
+    ["America/Los_Angeles", "US Pacific - America/Los_Angeles"],
+    ["Australia/Sydney", "Australia - Australia/Sydney"],
+  ].map(([id, name]) => ({ id, name }));
+  const currencyOptions = [
+    ["INR", "INR - Indian rupee"],
+    ["USD", "USD - US dollar"],
+    ["CAD", "CAD - Canadian dollar"],
+    ["GBP", "GBP - British pound"],
+    ["AUD", "AUD - Australian dollar"],
+    ["AED", "AED - UAE dirham"],
+    ["SGD", "SGD - Singapore dollar"],
+  ].map(([id, name]) => ({ id, name }));
   const staffRoleValues =
     s.workspace?.workspace_type === "INDIVIDUAL"
       ? ["TEACHER"]
@@ -66,6 +85,70 @@ export function action(s, key, id, refresh, context = {}) {
     }
     return fields;
   };
+  const programFields = (program = {}) => {
+    const activity = s.activities.find(
+      (item) => item.id === program.activity_id,
+    );
+    const assignedTeachers = program.id
+      ? s.program_teachers
+          .filter((row) => row.program_id === program.id)
+          .map((row) => row.membership_id)
+      : [s.membership_id];
+    return [
+      f("name", "Name", "text", {
+        value: program.name,
+        required: true,
+      }),
+      f("activity_name", "Activity (e.g. piano, maths, soccer)", "text", {
+        value: activity?.name,
+        required: true,
+      }),
+      select(
+        "category",
+        "Category",
+        opts(["ACADEMIC", "ARTS", "SPORTS", "OTHER"]),
+        activity?.category || "ARTS",
+      ),
+      select(
+        "program_kind",
+        "Type",
+        opts(["COURSE", "EVENT"]),
+        program.program_kind || "COURSE",
+      ),
+      select(
+        "teaching_format",
+        "Format",
+        opts(["GROUP", "ONE_TO_ONE"]),
+        program.teaching_format || "GROUP",
+      ),
+      f("level", "Level (optional)", "text", { value: program.level }),
+      f("description", "Description (optional)", "textarea", {
+        value: program.description,
+      }),
+      f("capacity", "Seats", "number", {
+        value: program.capacity || 10,
+        min: 1,
+        required: true,
+      }),
+      f("default_duration_minutes", "Duration in minutes", "number", {
+        value: program.default_duration_minutes || 60,
+        min: 1,
+        max: 1440,
+        required: true,
+      }),
+      f("teacher_ids", "Teachers", "multiple", {
+        options: teachers,
+        value: assignedTeachers,
+        required: true,
+      }),
+      ...deliveryFields("default_", {
+        default_delivery_mode: program.default_delivery_mode || "ONLINE",
+        default_meeting_url: program.default_meeting_url,
+        default_venue_id: program.default_venue_id,
+        default_space_id: program.default_space_id,
+      }),
+    ];
+  };
   const save =
     (path, method = "POST", transform = (x) => x) =>
     async (data) => {
@@ -124,6 +207,7 @@ export function action(s, key, id, refresh, context = {}) {
       id ? "Edit student" : "Add student",
       [
         f("full_name", "Full name", "text", { required: true }),
+        f("date_of_birth", "Date of birth", "date"),
         f("email", "Email", "email"),
         f("phone", "Phone", "tel"),
         f("notes", "Notes"),
@@ -162,44 +246,25 @@ export function action(s, key, id, refresh, context = {}) {
           .filter(Boolean),
       })),
     );
-  if (key === "program")
+  if (key === "program" || key === "edit-program") {
+    const program = s.programs.find((row) => row.id === id) || {};
     edit(
-      "Create class or event",
+      id ? "Edit class or event" : "Create class or event",
       [
-        f("name", "Name", "text", { required: true }),
-        f("activity_name", "Activity (e.g. piano, maths, soccer)", "text", {
-          required: true,
-        }),
-        select(
-          "category",
-          "Category",
-          opts(["ACADEMIC", "ARTS", "SPORTS", "OTHER"]),
-          "ARTS",
-        ),
-        select("program_kind", "Type", opts(["COURSE", "EVENT"]), "COURSE"),
-        select(
-          "teaching_format",
-          "Format",
-          opts(["GROUP", "ONE_TO_ONE"]),
-          "GROUP",
-        ),
-        f("level", "Level (optional)"),
-        f("capacity", "Seats", "number", { value: 10, min: 1, required: true }),
-        f("default_duration_minutes", "Duration in minutes", "number", {
-          value: 60,
-          min: 1,
-          max: 1440,
-          required: true,
-        }),
-        f("teacher_ids", "Teachers", "multiple", {
-          options: teachers,
-          value: [s.membership_id],
-          required: true,
-        }),
-        ...deliveryFields("default_"),
+        ...programFields(program),
+        ...(id
+          ? [
+              f(
+                "update_note",
+                "These changes become the defaults for future schedules. Existing session dates, teachers and locations keep their saved history.",
+                "note",
+              ),
+            ]
+          : []),
       ],
-      save("/programs"),
+      save(id ? `/programs/${id}` : "/programs", id ? "PATCH" : "POST"),
     );
+  }
   if (key === "teachers")
     edit(
       "Default teachers for future sessions",
@@ -485,18 +550,16 @@ export function action(s, key, id, refresh, context = {}) {
       "Invite team member",
       [
         f("email", "Their Google email", "email", { required: true }),
-        f("roles", "Roles", "multiple", {
-          options: opts(staffRoleValues),
-          value: ["TEACHER"],
-          required: true,
-          help:
-            s.workspace?.workspace_type === "INDIVIDUAL"
-              ? "Individual practices can invite teachers only."
-              : "Institutes can invite Admin, Operator or Teacher roles.",
-        }),
+        select("role", "Role", opts(staffRoleValues), "TEACHER"),
+        f("role_note", s.workspace?.workspace_type === "INDIVIDUAL"
+          ? "Individual practices can invite Teachers only."
+          : "Admin, Operator and Teacher are separate roles. A person can hold one of them in this workspace.", "note"),
       ],
       async (d) => {
-        const result = await api("/invitations", "POST", d);
+        const result = await api("/invitations", "POST", {
+          email: d.email,
+          roles: [d.role],
+        });
         await refresh();
         notice(
           `Share this private invitation link with ${result.email}: ${result.url} (expires in 72 hours).`,
@@ -508,29 +571,89 @@ export function action(s, key, id, refresh, context = {}) {
     const operationalRoles = m.roles.filter(
       (role) => role !== "OWNER" && staffRoleValues.includes(role),
     );
+    const isOwner = m.roles.includes("OWNER");
     edit(
       `Manage ${m.full_name}`,
+      isOwner
+        ? [
+            f("teacher_role", "Owner also teaches", "checkbox", {
+              value: operationalRoles.includes("TEACHER"),
+            }),
+            f("owner_note", "Owner access is permanent. An individual practice owner must also remain a Teacher.", "note"),
+          ]
+        : [
+            select("role", "Role", opts(staffRoleValues), operationalRoles[0]),
+            select("status", "Membership", opts(["ACTIVE", "SUSPENDED", "LEFT"]), m.status),
+          ],
+      save(`/members/${id}`, "PATCH", (d) => ({
+        roles: isOwner ? (d.teacher_role ? ["TEACHER"] : []) : [d.role],
+        status: isOwner ? "ACTIVE" : d.status,
+      })),
+    );
+  }
+
+  if (key === "edit-workspace")
+    edit(
+      "Edit workspace",
       [
-        f("roles", m.roles.includes("OWNER") ? "Operational roles" : "Roles", "multiple", {
-          options: opts(staffRoleValues),
-          value: operationalRoles,
-          required: !m.roles.includes("OWNER"),
-          help: m.roles.includes("OWNER")
-            ? s.workspace?.workspace_type === "INDIVIDUAL"
-              ? "Individual owner status is fixed, and the owner must remain a Teacher."
-              : "Owner status is fixed here. Admin, Operator or Teacher access can be changed."
-            : s.workspace?.workspace_type === "INDIVIDUAL"
-              ? "Individual practices use Teacher for staff access."
-              : "Choose at least one staff role.",
-        }),
-        select(
-          "status",
-          "Membership",
-          opts(["ACTIVE", "SUSPENDED", "LEFT"]),
-          m.status,
-        ),
+        f("name", "Workspace name", "text", { value: s.workspace.name, required: true }),
+        select("timezone", "Timezone", timezoneOptions, s.workspace.timezone),
+        select("currency", "Currency", currencyOptions, s.workspace.currency),
       ],
-      save(`/members/${id}`, "PATCH"),
+      async (data) => {
+        await api("", "PATCH", { ...data, currency: data.currency.toUpperCase() });
+        location.reload();
+      },
+    );
+
+  if (key === "delete-workspace")
+    edit(
+      "Permanently delete workspace",
+      [
+        f("warning", "This permanently deletes every class, schedule, venue, student, membership and attendance record in this workspace. This cannot be undone.", "note"),
+        f("confirmation", `Type ${s.workspace.name} to confirm`, "text", { required: true }),
+      ],
+      async (data) => {
+        await api("", "DELETE", data);
+        location.href = "/dashboard?overview=1";
+      },
+      { submitLabel: "Delete workspace", progressLabel: "Deleting…", danger: true },
+    );
+
+  const deleteActions = {
+    "delete-program": {
+      title: "Delete class or event",
+      message: "The class will be archived. Active enrollments and future schedules under it will be cancelled.",
+      path: `/programs/${id}`,
+    },
+    "delete-session": {
+      title: "Delete schedule",
+      message: "This schedule will be cancelled and kept in history.",
+      path: `/sessions/${id}`,
+    },
+    "delete-venue": {
+      title: "Delete venue",
+      message: "The venue will be archived. Move active classes and upcoming schedules first.",
+      path: `/venues/${id}`,
+    },
+    "delete-student": {
+      title: "Delete student",
+      message: "The student will be archived and removed from future schedules and active enrollments.",
+      path: `/students/${id}`,
+    },
+    "delete-member": {
+      title: "Remove team member",
+      message: "Their workspace access will end. Reassign their active classes and upcoming schedules first.",
+      path: `/members/${id}`,
+    },
+  };
+  if (deleteActions[key]) {
+    const item = deleteActions[key];
+    edit(
+      item.title,
+      [f("warning", item.message, "note")],
+      save(item.path, "DELETE"),
+      { submitLabel: "Delete", progressLabel: "Deleting…", danger: true },
     );
   }
   if (key === "policy")

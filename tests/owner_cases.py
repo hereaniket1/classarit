@@ -4,6 +4,20 @@ from datetime import datetime, timedelta, timezone
 
 
 class OwnerCases:
+    def institute_payload(self, name="Institute"):
+        return {
+            "name": name,
+            "workspace_type": "INSTITUTE",
+            "business_legal_name": name + " Pvt Ltd",
+            "business_gstin": "27ABCDE1234F1Z5",
+            "owner_aadhaar_number": "123412341234",
+            "business_address_line1": "Main branch",
+            "business_city": "Mumbai",
+            "business_state": "Maharashtra",
+            "business_postal_code": "400001",
+            "business_country": "IN",
+        }
+
     def another_user(self, subject="bob"):
         client = self.client_type(self.app, base_url="http://127.0.0.1:8000")
         client.__enter__()
@@ -40,7 +54,7 @@ class OwnerCases:
         second = self.client.post(
             "/api/workspaces",
             headers=self.headers,
-            json={"name": "Second business", "workspace_type": "INSTITUTE"},
+            json=self.institute_payload("Second business"),
         ).json()
         self.client.get("/dashboard?workspace=" + self.w)
         default_redirect = self.client.get("/dashboard", follow_redirects=False)
@@ -91,6 +105,101 @@ class OwnerCases:
         self.assertEqual(
             self.client.get("/workspaces/" + second["id"]).status_code, 200
         )
+
+    def test_individual_owner_is_limited_to_one_individual_workspace(self):
+        self.ws_setup()
+        blocked = self.client.post(
+            "/api/workspaces",
+            headers=self.headers,
+            json={"name": "Second studio", "workspace_type": "INDIVIDUAL"},
+        )
+        self.assertEqual(blocked.status_code, 409, blocked.text)
+        self.assertIn("one active individual workspace", blocked.text)
+        company = self.client.post(
+            "/api/workspaces",
+            headers=self.headers,
+            json=self.institute_payload("Second business"),
+        )
+        self.assertEqual(company.status_code, 201, company.text)
+
+    def test_institute_workspace_requires_business_profile(self):
+        self.login()
+        csrf = self.client.get("/dashboard").text.split('name="csrf-token" content="')[1].split('"')[0]
+        missing = self.client.post(
+            "/api/workspaces",
+            headers={"X-CSRF-Token": csrf},
+            json={"name": "Company", "workspace_type": "INSTITUTE"},
+        )
+        self.assertEqual(missing.status_code, 422, missing.text)
+        created = self.client.post(
+            "/api/workspaces",
+            headers={"X-CSRF-Token": csrf},
+            json=self.institute_payload("Company"),
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+
+    def test_executive_can_flush_all_application_data(self):
+        csrf = self.login(email="aniketpathak1@gmail.com")
+        created = self.client.post(
+            "/api/workspaces",
+            headers={"X-CSRF-Token": csrf},
+            json={"name": "Reset me", "workspace_type": "INDIVIDUAL"},
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        from app.auth.database import auth_engine
+        from sqlalchemy import text
+
+        with auth_engine().connect() as conn:
+            terms_before = conn.execute(text("SELECT count(*) FROM classarit.user_terms_acceptances")).scalar_one()
+        self.assertGreaterEqual(terms_before, 1)
+        bad = self.client.post(
+            "/api/executive/flush-data",
+            headers={"X-CSRF-Token": csrf},
+            json={"confirmation": "delete"},
+        )
+        self.assertEqual(bad.status_code, 422, bad.text)
+        flushed = self.client.post(
+            "/api/executive/flush-data",
+            headers={"X-CSRF-Token": csrf},
+            json={"confirmation": "DELETE ALL DATA"},
+        )
+        self.assertEqual(flushed.status_code, 200, flushed.text)
+        self.assertGreater(len(flushed.json()["truncated_tables"]), 5)
+
+        with auth_engine().connect() as conn:
+            users = conn.execute(text("SELECT count(*) FROM classarit.app_users")).scalar_one()
+            workspaces = conn.execute(text("SELECT count(*) FROM classarit.workspaces")).scalar_one()
+            sessions = conn.execute(text("SELECT count(*) FROM classarit.auth_sessions")).scalar_one()
+            settings = conn.execute(text("SELECT count(*) FROM classarit.app_settings")).scalar_one()
+            migrations = conn.execute(text("SELECT count(*) FROM classarit.schema_migrations")).scalar_one()
+            terms_after_flush = conn.execute(text("SELECT count(*) FROM classarit.user_terms_acceptances")).scalar_one()
+        self.assertEqual(users, 0)
+        self.assertEqual(workspaces, 0)
+        self.assertEqual(sessions, 0)
+        self.assertEqual(settings, 4)
+        self.assertGreater(migrations, 0)
+        self.assertEqual(terms_after_flush, terms_before)
+        self.assertFalse(self.client.get("/auth/me").json()["authenticated"])
+
+        csrf = self.login(email="aniketpathak1@gmail.com")
+        rejected = self.client.request(
+            "DELETE",
+            "/api/executive/terms-acceptances",
+            headers={"X-CSRF-Token": csrf},
+            json={"confirmation": "DELETE ALL DATA"},
+        )
+        self.assertEqual(rejected.status_code, 422, rejected.text)
+        deleted = self.client.request(
+            "DELETE",
+            "/api/executive/terms-acceptances",
+            headers={"X-CSRF-Token": csrf},
+            json={"confirmation": "DELETE TERMS AUDIT"},
+        )
+        self.assertEqual(deleted.status_code, 200, deleted.text)
+        self.assertGreaterEqual(deleted.json()["deleted_terms_acceptances"], terms_before)
+        with auth_engine().connect() as conn:
+            terms_after_delete = conn.execute(text("SELECT count(*) FROM classarit.user_terms_acceptances")).scalar_one()
+        self.assertEqual(terms_after_delete, 0)
 
     def test_teacher_overview_has_only_assignments(self):
         self.ws_setup()
@@ -197,7 +306,7 @@ class OwnerCases:
         institute = self.client.post(
             "/api/workspaces",
             headers=self.headers,
-            json={"name": "Institute", "workspace_type": "INSTITUTE"},
+            json=self.institute_payload("Institute"),
         ).json()
         institute_base = "/api/workspaces/" + institute["id"]
         self.assertEqual(
@@ -209,7 +318,7 @@ class OwnerCases:
                     "roles": ["ADMIN", "OPERATOR", "TEACHER"],
                 },
             ).status_code,
-            201,
+            422,
         )
         operator_invite = self.client.post(
             institute_base + "/invitations",
@@ -226,6 +335,18 @@ class OwnerCases:
             ).status_code,
             200,
         )
+        operator_member = operator.get(institute_base + "/snapshot").json()["membership_id"]
+        from app.auth.database import auth_engine
+        from sqlalchemy import text
+        from sqlalchemy.exc import IntegrityError
+        with self.assertRaises(IntegrityError):
+            with auth_engine().begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO classarit.membership_roles(workspace_id,membership_id,role) VALUES (:w,:m,'TEACHER')"
+                    ),
+                    {"w": institute["id"], "m": operator_member},
+                )
         institute_snapshot = self.client.get(institute_base + "/snapshot").json()
         owner_teacher = institute_snapshot["membership_id"]
         self.assertEqual(
@@ -269,6 +390,144 @@ class OwnerCases:
             ).status_code,
             403,
         )
+
+    def test_settings_deletion_permissions_role_labels_and_workspace_delete(self):
+        self.ws_setup("INSTITUTE")
+
+        def invite_and_accept(subject, role):
+            invitation = self.post(
+                "/invitations",
+                {"email": subject + "@example.com", "roles": [role]},
+            )
+            client, headers = self.another_user(subject)
+            accepted = client.post(
+                "/api/invitations/" + invitation["url"].rsplit("/", 1)[1] + "/accept",
+                headers=headers,
+            )
+            self.assertEqual(accepted.status_code, 200, accepted.text)
+            member_id = client.get(self.base + "/snapshot").json()["membership_id"]
+            return client, headers, member_id
+
+        admin, admin_headers, admin_id = invite_and_accept("admin", "ADMIN")
+        operator, operator_headers, _operator_id = invite_and_accept("operator", "OPERATOR")
+        teacher, teacher_headers, teacher_id = invite_and_accept("teacher", "TEACHER")
+
+        for client, expected in [
+            (self.client, "OWNER"),
+            (admin, "ADMIN"),
+            (operator, "OPERATOR"),
+            (teacher, "TEACHER"),
+        ]:
+            page = client.get("/workspaces/" + self.w)
+            self.assertEqual(page.status_code, 200, page.text)
+            self.assertIn(f"<small>{expected}</small>", page.text)
+            self.assertIn('data-tab="settings"', page.text)
+            self.assertNotIn('data-tab="team"', page.text)
+            self.assertNotIn('data-tab="makeups"', page.text)
+
+        program = self.new_program("Teacher class", teacher_ids=[teacher_id])
+        session = self.new_session(program)
+        student = self.post("/students", {"full_name": "Protected student"})
+        venue = self.post("/venues", {"name": "Protected venue", "address": "Street"})
+
+        settings = teacher.get(self.base + "/section/settings")
+        self.assertEqual(settings.status_code, 200, settings.text)
+        self.assertEqual([row["id"] for row in settings.json()["programs"]], [program["id"]])
+        self.assertEqual([row["id"] for row in settings.json()["sessions"]], [session["id"]])
+        self.assertEqual(settings.json()["students"], [])
+        self.assertEqual(settings.json()["venues"], [])
+
+        for suffix in [
+            "/students/" + student["id"],
+            "/venues/" + venue["id"],
+            "/programs/" + program["id"],
+            "/sessions/" + session["id"],
+        ]:
+            denied = operator.delete(self.base + suffix, headers=operator_headers)
+            self.assertEqual(denied.status_code, 403, (suffix, denied.text))
+        self.assertEqual(
+            teacher.delete(self.base + "/students/" + student["id"], headers=teacher_headers).status_code,
+            403,
+        )
+        self.assertEqual(
+            teacher.delete(self.base + "/sessions/" + session["id"], headers=teacher_headers).status_code,
+            200,
+        )
+        self.assertEqual(
+            teacher.delete(self.base + "/programs/" + program["id"], headers=teacher_headers).status_code,
+            200,
+        )
+
+        admin_program = self.new_program("Admin removable class")
+        admin_student = self.post("/students", {"full_name": "Admin removable student"})
+        admin_venue = self.post("/venues", {"name": "Admin removable venue", "address": "Street"})
+        self.assertEqual(admin.delete(self.base + "/programs/" + admin_program["id"], headers=admin_headers).status_code, 200)
+        self.assertEqual(admin.delete(self.base + "/students/" + admin_student["id"], headers=admin_headers).status_code, 200)
+        self.assertEqual(admin.delete(self.base + "/venues/" + admin_venue["id"], headers=admin_headers).status_code, 200)
+        owner_member = self.client.get(self.base + "/snapshot").json()["membership_id"]
+        self.assertEqual(admin.delete(self.base + "/members/" + owner_member, headers=admin_headers).status_code, 409)
+        self.assertEqual(self.client.delete(self.base + "/members/" + teacher_id, headers=self.headers).status_code, 200)
+
+        self.assertEqual(
+            admin.patch(
+                self.base,
+                headers=admin_headers,
+                json={"name": "Blocked", "timezone": "Asia/Kolkata", "currency": "INR"},
+            ).status_code,
+            403,
+        )
+        renamed = self.client.patch(
+            self.base,
+            headers=self.headers,
+            json={"name": "Music institute", "timezone": "Asia/Kolkata", "currency": "INR"},
+        )
+        self.assertEqual(renamed.status_code, 200, renamed.text)
+        self.assertEqual(
+            admin.request(
+                "DELETE",
+                self.base,
+                headers=admin_headers,
+                json={"confirmation": "Music institute"},
+            ).status_code,
+            403,
+        )
+        deleted = self.client.request(
+            "DELETE",
+            self.base,
+            headers=self.headers,
+            json={"confirmation": "Music institute"},
+        )
+        self.assertEqual(deleted.status_code, 200, deleted.text)
+        self.assertEqual(self.client.get("/workspaces/" + self.w).status_code, 404)
+
+        from app.auth.database import auth_engine
+        from sqlalchemy import text
+        with auth_engine().begin() as connection:
+            self.assertEqual(
+                connection.execute(
+                    text("SELECT count(*) FROM classarit.workspace_memberships WHERE workspace_id=:w"),
+                    {"w": self.w},
+                ).scalar_one(),
+                0,
+            )
+
+    def test_linked_student_profile_uses_student_label(self):
+        self.ws_setup()
+        student = self.post("/students", {"full_name": "Learner", "email": "learner@example.com"})
+        learner, _headers = self.another_user("learner")
+        from app.auth.database import auth_engine
+        from sqlalchemy import text
+        with auth_engine().begin() as connection:
+            user_id = connection.execute(
+                text("SELECT app_user_id FROM classarit.user_emails WHERE email='learner@example.com'")
+            ).scalar_one()
+            connection.execute(
+                text("UPDATE classarit.students SET linked_user_id=:u WHERE id=:student"),
+                {"u": user_id, "student": student["id"]},
+            )
+        page = learner.get("/dashboard?overview=1")
+        self.assertEqual(page.status_code, 200, page.text)
+        self.assertIn("<small>STUDENT</small>", page.text)
 
 
     def test_active_staff_must_be_deactivated_before_becoming_owner(self):
@@ -467,7 +726,7 @@ class OwnerCases:
     def test_active_teachers_count_unique_people_across_owned_workspaces(self):
         self.ws_setup()
         first=self.w
-        second=self.client.post('/api/workspaces',headers=self.headers,json={'name':'Second','workspace_type':'INSTITUTE'}).json()['id']
+        second=self.client.post('/api/workspaces',headers=self.headers,json=self.institute_payload('Second')).json()['id']
         other,headers=self.another_user()
         memberships=[]
         for wid in [first,second]:

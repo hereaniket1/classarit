@@ -5,6 +5,27 @@ from fastapi import HTTPException
 
 INSTITUTE_STAFF_ROLES = {"ADMIN", "OPERATOR", "TEACHER"}
 INDIVIDUAL_STAFF_ROLES = {"TEACHER"}
+BUSINESS_FIELDS = {
+    "business_legal_name",
+    "business_gstin",
+    "owner_aadhaar_number",
+    "business_address_line1",
+    "business_address_line2",
+    "business_city",
+    "business_state",
+    "business_postal_code",
+    "business_country",
+}
+REQUIRED_BUSINESS_FIELDS = {
+    "business_legal_name",
+    "business_gstin",
+    "owner_aadhaar_number",
+    "business_address_line1",
+    "business_city",
+    "business_state",
+    "business_postal_code",
+    "business_country",
+}
 
 
 def staff_roles_for(workspace):
@@ -16,8 +37,9 @@ def staff_roles_for(workspace):
 
 
 def validate_staff_roles(workspace, roles):
+    roles = set(roles)
     allowed = staff_roles_for(workspace)
-    invalid = set(roles) - allowed
+    invalid = roles - allowed
     if invalid:
         if workspace["workspace_type"] == "INDIVIDUAL":
             raise HTTPException(
@@ -25,6 +47,46 @@ def validate_staff_roles(workspace, roles):
                 "Individual practices only use Teacher as an operational staff role.",
             )
         raise HTTPException(422, "Choose valid staff roles for this workspace.")
+    if len(roles) != 1:
+        raise HTTPException(
+            422, "Choose exactly one role: Admin, Operator or Teacher."
+        )
+
+
+def _ensure_teacher_reassignable(a, member_id):
+    if a.db.first(
+        """SELECT 1 FROM {s}.program_teachers pt
+        WHERE pt.workspace_id=:w AND pt.membership_id=:m
+          AND EXISTS (SELECT 1 FROM {s}.teaching_programs p WHERE p.workspace_id=pt.workspace_id AND p.id=pt.program_id AND p.status='ACTIVE')
+          AND NOT EXISTS (
+            SELECT 1 FROM {s}.program_teachers other
+            JOIN {s}.workspace_memberships om ON om.workspace_id=other.workspace_id AND om.id=other.membership_id AND om.status='ACTIVE'
+            JOIN {s}.membership_roles role ON role.workspace_id=om.workspace_id AND role.membership_id=om.id AND role.role='TEACHER'
+            WHERE other.workspace_id=pt.workspace_id AND other.program_id=pt.program_id AND other.membership_id<>pt.membership_id
+          ) LIMIT 1""",
+        w=a.id,
+        m=member_id,
+    ):
+        raise HTTPException(
+            409, "Assign another teacher to this member's active classes first."
+        )
+    if a.db.first(
+        """SELECT 1 FROM {s}.session_teachers st
+        JOIN {s}.class_sessions s ON s.workspace_id=st.workspace_id AND s.id=st.session_id
+        WHERE st.workspace_id=:w AND st.membership_id=:m
+          AND s.status='SCHEDULED' AND s.starts_at>CURRENT_TIMESTAMP
+          AND NOT EXISTS (
+            SELECT 1 FROM {s}.session_teachers other
+            JOIN {s}.workspace_memberships om ON om.workspace_id=other.workspace_id AND om.id=other.membership_id AND om.status='ACTIVE'
+            JOIN {s}.membership_roles role ON role.workspace_id=om.workspace_id AND role.membership_id=om.id AND role.role='TEACHER'
+            WHERE other.workspace_id=st.workspace_id AND other.session_id=st.session_id AND other.membership_id<>st.membership_id
+          ) LIMIT 1""",
+        w=a.id,
+        m=member_id,
+    ):
+        raise HTTPException(
+            409, "Assign another teacher to this member's upcoming schedules first."
+        )
 
 
 def memberships(db, user):
@@ -53,6 +115,58 @@ def has_active_staff_membership(db, user_id):
     )
 
 
+def _business_profile(db, user_id, payload):
+    data = payload.model_dump()
+    missing = [
+        field
+        for field in REQUIRED_BUSINESS_FIELDS
+        if not str(data.get(field) or "").strip()
+    ]
+    if missing:
+        raise HTTPException(
+            422,
+            "Company setup needs a business ID, owner government ID and address.",
+        )
+    existing = db.first(
+        "SELECT * FROM {s}.business_profiles WHERE owner_user_id=:u FOR UPDATE",
+        u=user_id,
+    )
+    fields = {field: data.get(field) for field in BUSINESS_FIELDS}
+    if existing:
+        db.execute(
+            """UPDATE {s}.business_profiles SET
+            legal_name=:business_legal_name,
+            gstin=:business_gstin,
+            owner_aadhaar_number=:owner_aadhaar_number,
+            address_line1=:business_address_line1,
+            address_line2=:business_address_line2,
+            city=:business_city,
+            state=:business_state,
+            postal_code=:business_postal_code,
+            country=:business_country,
+            updated_at=CURRENT_TIMESTAMP
+            WHERE id=:id""",
+            id=existing["id"],
+            **fields,
+        )
+        return db.first(
+            "SELECT * FROM {s}.business_profiles WHERE id=:id", id=existing["id"]
+        )
+    return db.insert(
+        "business_profiles",
+        owner_user_id=user_id,
+        legal_name=fields["business_legal_name"],
+        gstin=fields["business_gstin"],
+        owner_aadhaar_number=fields["owner_aadhaar_number"],
+        address_line1=fields["business_address_line1"],
+        address_line2=fields["business_address_line2"],
+        city=fields["business_city"],
+        state=fields["business_state"],
+        postal_code=fields["business_postal_code"],
+        country=fields["business_country"],
+    )
+
+
 def create_workspace(db, user, payload):
     account = db.first(
         "SELECT user_type FROM {s}.app_users WHERE id=:u FOR UPDATE", u=user["id"]
@@ -64,12 +178,28 @@ def create_workspace(db, user, payload):
             409,
             "Ask the current workspace owner or admin to deactivate this staff profile before using the same email as an owner.",
         )
+    data = payload.model_dump()
+    business_profile_id = None
+    if payload.workspace_type == "INDIVIDUAL":
+        if db.first(
+            """SELECT 1 FROM {s}.workspaces
+            WHERE owner_user_id=:u AND workspace_type='INDIVIDUAL' AND status='ACTIVE'
+            LIMIT 1""",
+            u=user["id"],
+        ):
+            raise HTTPException(
+                409,
+                "Independent teachers can have one active individual workspace. Create an institute/company workspace for multiple branches.",
+            )
+    else:
+        business_profile_id = _business_profile(db, user["id"], payload)["id"]
     db.execute("UPDATE {s}.app_users SET user_type='OWNER' WHERE id=:u", u=user["id"])
     workspace = db.insert(
         "workspaces",
-        **payload.model_dump(),
+        **{k: v for k, v in data.items() if k not in BUSINESS_FIELDS},
         created_by=user["id"],
-        owner_user_id=user["id"]
+        owner_user_id=user["id"],
+        business_profile_id=business_profile_id,
     )
     member = db.insert(
         "workspace_memberships", workspace_id=workspace["id"], user_id=user["id"]
@@ -231,7 +361,8 @@ def update_member(a, member_id, payload):
             raise HTTPException(
                 409, "The subscription owner cannot be removed or suspended."
             )
-        validate_staff_roles(a.workspace, new_roles)
+        if new_roles - {"TEACHER"}:
+            raise HTTPException(422, "An Owner may additionally be a Teacher only.")
         if a.workspace["workspace_type"] == "INDIVIDUAL" and "TEACHER" not in new_roles:
             raise HTTPException(
                 409, "An individual practice owner must remain a Teacher."
@@ -241,6 +372,21 @@ def update_member(a, member_id, payload):
         raise HTTPException(422, "Choose at least one staff role.")
     else:
         validate_staff_roles(a.workspace, new_roles)
+    if "TEACHER" in old_roles and "TEACHER" not in new_roles:
+        _ensure_teacher_reassignable(a, member_id)
+        a.db.execute(
+            "DELETE FROM {s}.program_teachers WHERE workspace_id=:w AND membership_id=:m",
+            w=a.id,
+            m=member_id,
+        )
+        a.db.execute(
+            """DELETE FROM {s}.session_teachers st USING {s}.class_sessions s
+            WHERE st.workspace_id=:w AND st.membership_id=:m
+              AND s.workspace_id=st.workspace_id AND s.id=st.session_id
+              AND s.status='SCHEDULED' AND s.starts_at>CURRENT_TIMESTAMP""",
+            w=a.id,
+            m=member_id,
+        )
     a.db.execute(
         "UPDATE {s}.workspace_memberships SET status=:status WHERE id=:id AND workspace_id=:w",
         status=payload.status,
@@ -258,6 +404,100 @@ def update_member(a, member_id, payload):
             w=a.id,
             m=member_id,
             r=role,
+        )
+    return {"ok": True}
+
+
+def remove_member(a, member_id):
+    a.allow("OWNER", "ADMIN")
+    member = a.db.get("workspace_memberships", a.id, member_id)
+    roles = {
+        row["role"]
+        for row in a.db.all(
+            "SELECT role FROM {s}.membership_roles WHERE workspace_id=:w AND membership_id=:m",
+            w=a.id,
+            m=member_id,
+        )
+    }
+    if "OWNER" in roles:
+        raise HTTPException(409, "The workspace Owner cannot be removed.")
+    if member["status"] != "ACTIVE":
+        raise HTTPException(409, "This member is already inactive.")
+    if "TEACHER" in roles:
+        _ensure_teacher_reassignable(a, member_id)
+        a.db.execute(
+            "DELETE FROM {s}.program_teachers WHERE workspace_id=:w AND membership_id=:m",
+            w=a.id,
+            m=member_id,
+        )
+        a.db.execute(
+            """DELETE FROM {s}.session_teachers st USING {s}.class_sessions s
+            WHERE st.workspace_id=:w AND st.membership_id=:m
+              AND s.workspace_id=st.workspace_id AND s.id=st.session_id
+              AND s.status='SCHEDULED' AND s.starts_at>CURRENT_TIMESTAMP""",
+            w=a.id,
+            m=member_id,
+        )
+    a.db.execute(
+        "UPDATE {s}.workspace_memberships SET status='LEFT' WHERE workspace_id=:w AND id=:m",
+        w=a.id,
+        m=member_id,
+    )
+    return {"ok": True}
+
+
+def update_workspace(a, payload):
+    a.allow("OWNER")
+    fields = payload.model_dump()
+    a.db.execute(
+        "UPDATE {s}.workspaces SET name=:name,timezone=:timezone,currency=:currency WHERE id=:w",
+        w=a.id,
+        **fields,
+    )
+    return a.db.first("SELECT * FROM {s}.workspaces WHERE id=:w", w=a.id)
+
+
+def delete_workspace(a, payload):
+    """Permanently remove one workspace and its tenant-scoped records."""
+    a.allow("OWNER")
+    if payload.confirmation.strip() != a.workspace["name"]:
+        raise HTTPException(422, "Type the workspace name exactly to confirm deletion.")
+    owner_id = a.workspace["owner_user_id"]
+    a.db.execute(
+        "UPDATE {s}.app_users SET default_workspace_id=NULL WHERE default_workspace_id=:w",
+        w=a.id,
+    )
+    tables = [
+        "makeup_bookings",
+        "makeup_entitlements",
+        "attendance",
+        "session_participants",
+        "session_teachers",
+        "class_sessions",
+        "recurring_session_series",
+        "enrollments",
+        "student_guardians",
+        "guardians",
+        "students",
+        "program_teachers",
+        "teaching_programs",
+        "venue_spaces",
+        "venues",
+        "activities",
+        "makeup_policies",
+        "workspace_invitations",
+        "membership_roles",
+        "workspace_memberships",
+    ]
+    for table in tables:
+        a.db.execute(f"DELETE FROM {{s}}.{table} WHERE workspace_id=:w", w=a.id)
+    a.db.execute("DELETE FROM {s}.workspaces WHERE id=:w", w=a.id)
+    if not a.db.first(
+        "SELECT 1 FROM {s}.workspaces WHERE owner_user_id=:u", u=owner_id
+    ):
+        a.db.execute(
+            "UPDATE {s}.app_users SET user_type='MEMBER',default_workspace_id=NULL WHERE id=:u",
+            u=owner_id,
         )
     return {"ok": True}
 

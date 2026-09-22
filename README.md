@@ -13,7 +13,7 @@ teams, students, classes, sports events, attendance and makeup lessons.
 - [Render deployment](#deploy-on-render)
 - [Environment variables](#environment-variables)
 - [Authentication database DDL](#authentication-database-ddl)
-- [Future login methods](#future-login-methods)
+- [Account profile and login methods](#account-profile-and-login-methods)
 - [Owner dashboard and account types](#owner-dashboard-and-account-types)
 - [Workspace and teaching data flow](#workspace-and-teaching-data-flow)
 - [UI walkthrough and API reference](#ui-walkthrough-and-api-reference)
@@ -29,11 +29,11 @@ pip install -r requirements.txt
 python run.py --reload
 ```
 
-Open <http://127.0.0.1:8000>. The landing page is public; `/login` offers Google,
+Open <http://127.0.0.1:8000>. The public home page includes the shared Google and email/password sign-in card, password visibility control and inline signup; `/login` offers email/password and Google,
 and `/dashboard` requires a valid session. There is no demo bypass. On a fresh
 installation, configure `.env`, initialize [authentication DDL](#authentication-database-ddl),
 then run migrations `001_workspaces_and_teaching.sql`,
-`002_account_types_and_single_owner.sql`, `003_owner_staff_separation.sql`, `004_recurring_session_series.sql`, `005_workspace_type_role_policy.sql` and `006_direct_scheduled_participants.sql` in order with
+`002_account_types_and_single_owner.sql`, `003_owner_staff_separation.sql`, `004_recurring_session_series.sql`, `005_workspace_type_role_policy.sql`, `006_direct_scheduled_participants.sql`, `007_default_workspace.sql`, `008_notifications_otp_executive.sql`, `009_exclusive_staff_roles.sql`, `010_password_login_and_profiles.sql`, `011_business_profiles_and_individual_limit.sql` and `012_terms_acceptance_audit.sql` in order with
 `python setup/apply_migration.py FILENAME` before opening the signed-in dashboard. Existing configured databases with the journaled
 migration skip safely.
 
@@ -78,20 +78,24 @@ Enable the JetBrains Mermaid plugin to render this README's diagrams in Markdown
 5. Start the app, choose **Log in → Continue with Google**, complete Google approval,
    and return to your dashboard. If the popup is blocked, use **Continue in this tab**.
 
-A first successful Google login creates its account automatically when new Google accounts are enabled. Email OTP signup is also available from the login page and can be paused from the executive dashboard.
-An existing email belonging to another identity requires a future linking flow and
-is not automatically merged in this release.
+A first successful Google login creates its account automatically when new Google accounts are enabled. A user can also create an email/password account from the same page. If email verification is enabled, that account remains pending until its six-digit email code is accepted. Google can attach to an existing active account only when the matching email is already verified.
 
 ## Current login flow
 
 ```mermaid
 flowchart TD
     Home[Public landing page] --> Choice{Choose action}
-    Choice -->|Sign up| Signup[Email OTP signup]
-    Signup --> Otp[Send 6-digit Resend OTP]
+    Choice -->|Sign up| Signup[Name, phone, email and password]
+    Signup --> VerifySetting{Email verification enabled?}
+    VerifySetting -->|Yes| Otp[Send 6-digit Resend OTP]
     Otp --> Verify[Verify OTP and activate account]
+    VerifySetting -->|No| Unverified[Activate with Unverified badge]
     Verify --> Session
+    Unverified --> Session
     Choice -->|Log in| Login[Separate login page]
+    Login --> Password[Verify email and Argon2id password]
+    Password -->|Valid active account| Session
+    Password -->|Invalid or pending| Error
     Login --> Click[Continue with Google]
     Click --> Popup{Popup allowed?}
     Popup -->|Yes| Google[Google authorization window]
@@ -102,8 +106,10 @@ flowchart TD
     Callback -->|Valid| Identity{Google subject already linked?}
     Identity -->|Yes| Active{Account ACTIVE?}
     Identity -->|No| Email{Email already belongs to an account?}
-    Email -->|Yes| LinkLater[Explain account linking is coming soon]
+    Email -->|Verified active account| Link[Attach Google identity to that account]
+    Email -->|Unverified or inactive| LinkLater[Require email verification first]
     Email -->|No| Create[Create user, email and Google identity atomically]
+    Link --> Active
     Create --> Active
     Active -->|No| Deny[Deny login]
     Active -->|Yes| Session[Create hashed server session and rotate cookie state]
@@ -146,9 +152,16 @@ login displays a retry option. OAuth tokens are not persisted.
 - Create academic, arts, sports or other activities inline when creating a program.
 - Create group or one-to-one courses and one-off events. Assign default teachers,
   duration, capacity, level and online/in-person/hybrid delivery details.
+- Edit class and event details from the Classes & events table. Updates become the
+  defaults for new schedules while existing session history remains unchanged.
 - Add venues, addresses, directions and rooms/courts/pitches.
 - Add/edit students and their primary guardian contact; enroll students in courses
   or book them directly into event sessions. End enrollment to release future seats.
+- Students show a Verified or Unverified badge. Adult verification follows the linked
+  student's primary email; a minor's status follows the linked primary guardian email.
+  Matching verified accounts provide identity context only and never grant workspace access.
+- Every signed-in person has a shared Profile page for name, phone, date of birth,
+  country and email verification, regardless of whether they started with Google or password.
 
 ### Scheduling, attendance and makeup classes
 
@@ -183,14 +196,14 @@ backend operation and follow-up refresh finish.
 
 ### Current MVP limitations
 
-- Email OTP signup is implemented. Password setup/login, Apple/Facebook and account
-  linking remain future work.
+- Email/password signup and login are implemented. Password reset, changing or adding
+  a password to a Google-only account, and Apple/Facebook linking remain future work.
 - Invitations remain shareable links and are also emailed through Resend when email delivery is configured.
 - Schedule is an occurrence list, not a drag-and-drop calendar. Weekly recurrence
   generation is available; bulk edit/cancel for a whole series is still future work.
-- Program teacher edits change defaults for new sessions; existing session assignments
-  remain historical snapshots. UI scheduling inherits defaults; the API also accepts
-  per-session teacher, delivery and capacity overrides.
+- Program edits change defaults for new sessions; existing session dates, teacher
+  assignments and locations remain historical snapshots. UI scheduling inherits
+  defaults; the API also accepts per-session teacher, delivery and capacity overrides.
 - Workspace closure, class/venue deletion, student self-service and attendance
   correction after a settled makeup require later workflows.
 - Students have optional primary guardian entry/edit in the UI; multiple-guardian
@@ -304,10 +317,16 @@ python setup/apply_migration.py 003_owner_staff_separation.sql
 python setup/apply_migration.py 004_recurring_session_series.sql
 python setup/apply_migration.py 005_workspace_type_role_policy.sql
 python setup/apply_migration.py 006_direct_scheduled_participants.sql
+python setup/apply_migration.py 007_default_workspace.sql
+python setup/apply_migration.py 008_notifications_otp_executive.sql
+python setup/apply_migration.py 009_exclusive_staff_roles.sql
+python setup/apply_migration.py 010_password_login_and_profiles.sql
+python setup/apply_migration.py 011_business_profiles_and_individual_limit.sql
+python setup/apply_migration.py 012_terms_acceptance_audit.sql
 ```
 
 Run against the intended DB credentials from `.env` locally or Render Environment.
-The configured project database needs migrations through 006. If Render uses that same
+The configured project database needs migrations through 010. If Render uses that same
 database, do not manually rerun the SQL: the runner safely verifies/skips its journaled
 version. A different Render database needs its own initialization. No DDL runs on startup.
 
@@ -373,12 +392,12 @@ for PostgreSQL 14+. It creates the `classarit` schema and all six tables:
 
 | Table | Purpose |
 | --- | --- |
-| `app_users` | Shared profile, optional future username, currency, status, timestamps |
+| `app_users` | Shared name, phone, birth date, country, optional username, currency and account status |
 | `user_emails` | Unique contact emails, verification date and primary-email flag |
 | `auth_identities` | Unique provider/subject identities linked to users |
 | `auth_sessions` | Hashed, expiring, revocable sessions (implemented) |
-| `password_credentials` | Reserved for password login |
-| `auth_challenges` | Reserved for email verification, password setup/reset and linking |
+| `password_credentials` | Argon2id password hashes and password-change timestamps |
+| `auth_challenges` | Expiring email verification, password setup/reset and identity-linking proofs |
 
 `citext` is installed before tables. If already installed in `public` or another
 schema, the script reuses its type/operators through a transaction-local search path;
@@ -443,6 +462,9 @@ CREATE TABLE classarit.app_users (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     username citext UNIQUE,
     full_name text,
+    phone text CHECK (phone IS NULL OR length(btrim(phone)) BETWEEN 5 AND 30),
+    date_of_birth date CHECK (date_of_birth IS NULL OR date_of_birth <= CURRENT_DATE),
+    country text CHECK (country IS NULL OR length(btrim(country)) BETWEEN 2 AND 100),
     avatar_url text,
     base_currency varchar(3) NOT NULL DEFAULT 'USD'
         CHECK (base_currency ~ '^[A-Z]{3}$'),
@@ -494,7 +516,7 @@ CREATE TABLE classarit.auth_challenges (
     app_user_id uuid NOT NULL REFERENCES classarit.app_users(id) ON DELETE CASCADE,
     target_email citext NOT NULL,
     purpose text NOT NULL CHECK (purpose IN
-        ('EMAIL_VERIFY', 'PASSWORD_SETUP', 'PASSWORD_RESET', 'LINK_IDENTITY')),
+        ('EMAIL_VERIFY', 'PASSWORD_SETUP', 'PASSWORD_RESET', 'LINK_IDENTITY', 'REGISTRATION_EMAIL_OTP')),
     -- Keyed HMAC of a random code/token, challenge ID, purpose and target.
     -- The HMAC key belongs in server secrets, never in this database.
     secret_digest text NOT NULL CHECK (length(btrim(secret_digest)) > 0),
@@ -555,38 +577,38 @@ back up the target database before running it. It is never run by the applicatio
 The product toggles are stored in `classarit.app_settings`:
 
 - `google_new_accounts_enabled`: existing Google identities can still log in when this is off, but first-time Google emails cannot create new accounts.
-- `signup_enabled`: controls email OTP registration only. Existing login methods continue to work.
+- `signup_enabled`: controls creation of new email/password accounts. Existing password and Google logins continue to work.
+- `email_verification_enabled`: requires new password accounts to confirm a six-digit email OTP before login. When disabled, signup remains available and the account is visibly Unverified until verification is enabled and completed from Profile.
 - `notification_emails_enabled`: controls invitation, staff-change and student schedule notification emails.
 
-Email OTP registration uses `auth_challenges` with purpose `REGISTRATION_EMAIL_OTP`. The OTP expires in 10 minutes and is stored only as an HMAC digest using `OTP_HMAC_SECRET`; if that value is not configured, the session signing key is used as a fallback.
+Email verification uses `auth_challenges` with purpose `REGISTRATION_EMAIL_OTP` during signup and `EMAIL_VERIFY` from Profile. The OTP expires in 10 minutes and is stored only as an HMAC digest using `OTP_HMAC_SECRET`; if that value is not configured, the session signing key is used as a fallback. Authentication codes are sent even when optional operational notification emails are disabled.
 
 Operational emails use Resend through `RESEND_API_KEY` and `RESEND_FROM_EMAIL`. Staff invitations expire after 72 hours. Student/guardian schedule notifications are sent when a student is added to a one-time or recurring schedule, booked into an event, or removed by session cancellation.
 
 API telemetry is stored in `classarit.api_request_metrics` with method, path, route template, status code, latency and timestamp only. Query strings, request bodies, IP addresses and user agents are not stored. The middleware keeps only recent rows by deleting samples older than 30 days during inserts.
 
-## Future login methods
+## Account profile and login methods
 
-Email OTP signup is implemented for registration. Password signup/setup/reset,
-Apple/Facebook and multi-provider linking remain future work. The database supports
-their identities; routes and proof flows still need implementation.
+Email is the password-login identifier. Signup deliberately asks only for full name,
+phone, email and a password of at least 10 characters. Passwords are stored as Argon2id
+hashes. Date of birth and country stay in the shared Profile so signup remains short.
+Users who begin with Google can fill the same profile; users who begin with a password
+can later connect Google when the provider returns the same already-verified email.
 
-The longer-term experience is one user account with several login methods. Never
-silently attach a provider or password because its email matches an existing account.
-Automatic linking needs sufficient provider proof and a verified existing account;
-otherwise require an inline ownership challenge. A Google-first user needs verified
-password setup before password login can work. Apple relay addresses may require
-explicit linking from an authenticated account. Google's `email_verified` alone is
-not sufficient ownership proof for every third-party email. See
-[Google identity claims](https://developers.google.com/identity/gsi/web/reference/html-reference).
+Email verification is distinct from identity-document verification. A verified badge
+means Classarit confirmed control of the relevant email. For an adult student this is
+the student's email. For a student under 18 it is the primary guardian's email. Missing
+or unverified links remain clearly marked Unverified. No Aadhaar or government-ID data
+is collected in this release.
 
-Before enabling those methods: use Argon2id hashes; bind OTP HMACs to purpose, account,
-email and pending identity; enforce issuance/attempt limits; atomically consume proofs;
-never return OTPs in API responses; preserve BLOCKED/INACTIVE status; and prevent an
-unverified password signup from leaving an attacker-chosen password on a later social
-account. These are application rules, not guarantees provided by DDL alone.
+The account model supports several login methods without duplicating the person. A
+verified, active email account can receive a matching Google identity. An unverified or
+inactive match is rejected until ownership is proved. Apple/Facebook, password reset,
+password setup for Google-only accounts, OTP issuance rate limits and government-ID
+verification remain future work.
 
 <details>
-<summary>Future multi-method login flow (not implemented)</summary>
+<summary>Multi-method account flow and future providers</summary>
 
 ```mermaid
 flowchart TD
@@ -637,7 +659,8 @@ SQLite storage. It never connects to the database in `.env`. Install PostgreSQL 
 ```
 
 Coverage includes public access, demo-bypass removal, OAuth state/nonce and signed-token
-validation, first/repeat Google login, email conflicts, blocked/expired sessions,
+validation, first/repeat Google login, password signup/login with Argon2id, email OTP
+verification, profile updates, student/guardian verification badges, blocked/expired sessions,
 logout cookie replay, CSRF protection, cross-account data/file isolation, migration
 reapplication, workspace onboarding/isolation, invitation ownership/replay, last-owner
 protection, capacity/teacher conflicts, event booking, guardian creation and the full
@@ -652,7 +675,7 @@ CLASSARIT_JS_TOOLS=/tmp/classarit-ui-tools node tests/workspace_ui.mjs
 
 This checks all seven dashboard sections, twenty dialogs, request payloads, CSRF,
 error retention, escaping and all README diagrams. It does not replace visual
-browser review or a real Google login. The PostgreSQL suite currently has 27 cases,
+browser review or a real Google login. The PostgreSQL suite currently has 33 cases,
 including owner rankings, teacher-only views, APPOWNER exclusivity, single-owner constraints,
 backward-compatible migration rollout, concurrent last-seat booking and roster rollback.
 
@@ -668,12 +691,14 @@ and current limits are called out separately.
 
 ### Core decisions
 
-- A user is a person; an institute is a workspace. A person can own one business,
-  teach in another and run an individual practice using the same account.
+- A user is a person. A company or organization has one owner business profile
+  with GSTIN, owner Aadhaar and main-branch address; that profile can create
+  multiple institute/company workspaces for branches or operating units.
 - `workspaces.workspace_type` is `INDIVIDUAL` or `INSTITUTE`. This is not a permanent
   classification of the person. Both use the same data model and permission checks.
-- For now, separate businesses are separate workspaces. Branches within a business
-  remain a future decision; a venue is a physical location, not a business branch.
+- An independent teacher can create one active individual workspace and does not
+  submit business details. This keeps personal teaching setup fast while leaving
+  company workspaces ready for future SaaS subscription options.
 - Activities include mathematics, singing, piano, soccer and cricket. The UI may
   call staff teachers or coaches, and students participants, without duplicating tables.
 - A program is an ongoing class/course or a one-off event. A session is a specific
@@ -775,7 +800,7 @@ so it also supports events and make-up visitors without a course enrollment.
 
 | Area | Tables | Purpose |
 | --- | --- | --- |
-| Organizations and access | `workspaces`, `workspace_memberships`, `membership_roles` | Independent businesses/practices, membership and multiple roles |
+| Organizations and access | `workspaces`, `workspace_memberships`, `membership_roles` | Independent businesses/practices and role-scoped membership |
 | Staff onboarding | `workspace_invitations` | Hashed invitation tokens, expiry, intended email and proposed roles |
 | Activities and places | `activities`, `venues`, `venue_spaces` | Academic/art/sport categories and grounds, courts, nets or studios |
 | Classes and events | `teaching_programs`, `program_teachers` | Course/event details, defaults and normal teaching assignments |
@@ -798,11 +823,13 @@ application check.
 | OWNER | One subscription owner per workspace; can manage the workspace and may also teach |
 | Admin | Institute staff management, class/program, student and operational management; future payment activities; cannot become OWNER through member editing |
 | Operator | Daily operations: classes, schedules, enrollments, attendance, students, venues and makeups; no staff-role, ownership or policy changes |
-| Teacher / Coach | Assigned classes/sessions and relevant participants, attendance and attendance notes |
+| Teacher / Coach | Assigned classes/sessions and relevant participants, attendance and attendance notes; may archive an assigned class or cancel an assigned schedule, but cannot delete students |
 
-Members can hold multiple operational roles. An individual practice starts with OWNER
-and TEACHER, and keeps Teacher as the only operational staff role. An institute can
-use Admin, Operator and Teacher for staff. Each workspace has exactly one active OWNER, matching `owner_user_id`.
+Admin, Operator and Teacher are separate staff roles: one membership can hold exactly
+one of them. An individual practice starts with OWNER and TEACHER, and keeps Teacher
+as the only operational staff role. An institute can use Admin, Operator and Teacher
+for different staff. An OWNER may additionally be a TEACHER. Each workspace has
+exactly one active OWNER, matching `owner_user_id`.
 Neither invitations nor member edits can add a second owner. The owner cannot be
 removed, suspended or replaced using general member administration; the staff screen
 only edits Admin, Operator and Teacher. A subscription-aware ownership transfer
@@ -819,6 +846,7 @@ Database constraints enforce:
 - One membership per workspace/user and unique role assignments.
 - Exactly one active owner matching `workspaces.owner_user_id`; APPOWNER cannot be a workspace member.
 - Individual practices cannot use Admin/Operator roles or invitations, and their owner must remain a Teacher.
+- Admin, Operator and Teacher are mutually exclusive; OWNER may additionally have TEACHER. Migration 009 enforces this for memberships and invitations.
 - OWNER accounts cannot also keep active non-owner staff memberships; migration 003 enforces this separation.
 - Same-workspace links for staff, activities, venues, students, classes and make-ups.
 - A venue space belongs to the selected venue, not merely the same workspace.
@@ -898,8 +926,8 @@ workspace database; preserve the new tables if rolling application code back.
 ## Progressive implementation plan
 
 Phases 1–6 below have working UI/API foundations in this release, subject to the
-MVP limitations above. Phases 7–8 remain the recommended next steps. Google login
-remains the foundation; password signup, Apple/Facebook and account linking are separate work.
+MVP limitations above. Phases 7–8 remain the recommended next steps. Google and
+email/password login share one account model; more providers require reviewed linking flows.
 
 | Phase | Delivery | Completion check |
 | --- | --- | --- |
@@ -910,7 +938,7 @@ remains the foundation; password signup, Apple/Facebook and account linking are 
 | 5. Scheduling and attendance | Explicit rosters, session staff, online/in-person/hybrid location controls, rescheduling and cancellation | Resource conflicts are caught, past attendance is retained, Join Online/View Directions matches delivery mode |
 | 6. Make-up workflow | Policies, individual/batch entitlements, existing/new replacement bookings, fulfillment and repeat cancellation | No double credits or fulfillment; replacement cancellation preserves entitlement; fees are not duplicated |
 | 7. Billing, materials and communication | Migrate payment/material ownership to workspace model; design fees/invoices, notifications and reminders | Money uses an auditable model; files and notifications respect recipient/workspace boundaries |
-| 8. Additional login and operations | Password setup/OTP, Apple/Facebook linking, audit history, backup/restore and performance improvements | Identity linking preserves accounts; restore is rehearsed; access and concurrency tests pass |
+| 8. Additional login and operations | Password reset/setup for Google-only users, Apple/Facebook linking, audit history, backup/restore and performance improvements | Identity linking preserves accounts; restore is rehearsed; access and concurrency tests pass |
 
 ### Migration and release approach
 
@@ -962,11 +990,11 @@ invalid input. `/docs` includes the complete typed request models.
 
 ### 1. Login, onboarding, switching and staff invitations
 
-After Google login, name a workspace and choose Individual or Institute. The account
-can create more businesses using **Add a workspace**. Choose **Team → Invite member**,
-select Admin, Operator and/or Teacher roles, then copy the private link displayed above the page and share it with
-the intended person. No email is sent automatically. Invitations expire after seven
-days; only their SHA-256 hashes are stored. The acceptance screen supports **Not now**. Signed-out visitors see a login prompt;
+After Google or email/password login, name a workspace and choose Individual or Institute. The account
+can create more businesses using **Add a workspace**. Choose **Settings → Invite member**,
+select one of Admin, Operator or Teacher, and Classarit emails the private join link to
+the intended person. Invitations expire after 72 hours; only their SHA-256 hashes are
+stored. The acceptance screen supports **Not now**. Signed-out visitors see a login prompt;
 the invitation is preserved when Google login rotates the session, then reopened
 for explicit acceptance.
 
@@ -981,11 +1009,11 @@ sequenceDiagram
     UI->>API: POST /api/workspaces
     API->>DB: Create workspace, membership, Owner + Teacher, policy
     DB-->>UI: Workspace ready
-    Owner->>API: Create invitation with email and roles
-    API->>DB: Store token hash and seven-day expiry
+    Owner->>API: Create invitation with email and one role
+    API->>DB: Store token hash and 72-hour expiry
     API-->>Owner: Private shareable link
     Owner->>Member: Share link outside the app
-    Member->>UI: Open link and sign in with Google
+    Member->>UI: Open link and sign in with Google or password
     UI->>API: Accept invitation with CSRF token
     API->>DB: Lock workspace, validate verified email and expiry
     alt Valid pending invitation
@@ -998,24 +1026,53 @@ sequenceDiagram
 
 | Action | Endpoint |
 | --- | --- |
+| Create password account / verify signup | `POST /auth/password/register`, `POST /auth/password/register/verify` |
+| Password login | `POST /auth/password/login` |
+| View / update shared profile | `GET /profile`, `PATCH /api/account/profile` |
+| Start / complete profile email verification | `POST /auth/email/verify/start`, `POST /auth/email/verify/complete` |
 | List/create workspaces | `GET/POST /api/workspaces` |
 | Account overview / workspace data | `GET /api/dashboard/overview`, `GET /section/{tab}` for workspace tabs; `GET /snapshot` remains compatibility/debug data |
 | Invite / revoke | `POST /invitations`, `DELETE /invitations/{id}` |
 | Accept / dismiss pending invitation | `POST /api/invitations/{token}/accept`, `POST /api/invitations/dismiss` |
 | Change member roles/status | `PATCH /members/{id}` |
+| Remove member | `DELETE /members/{id}` |
+| Edit / permanently delete workspace | `PATCH /api/workspaces/{id}`, `DELETE /api/workspaces/{id}` |
 
-Owner/Admin manage the team; OWNER itself cannot be added or removed through member edits. Teacher-only
+Owner/Admin manage people from Settings; OWNER itself cannot be added or removed through member edits. Teacher-only
 members cannot create students, classes, venues, invitations or makeup credits.
-They can mark attendance/complete their assigned sessions. Operator can manage
+They can mark attendance/complete their assigned sessions and delete their assigned
+classes or schedules. They cannot delete students. Operator can manage
 teaching operations but cannot change staff roles or policy. All writes within a
 workspace serialize using a row lock, including invitation acceptance.
 
+### Workspace settings and deletion rules
+
+The left sidebar exposes **Settings** and no longer shows Team or Makeup classes.
+Settings centralizes destructive actions:
+
+- OWNER and Admin can archive classes, cancel schedules, archive venues and students,
+  and remove non-owner staff.
+- A Teacher can archive only assigned classes and cancel only assigned schedules.
+- An Operator has no delete permission.
+- Only the OWNER can edit the workspace or permanently delete it. The confirmation
+  requires the exact workspace name. Permanent deletion removes every descendant
+  business record; class, schedule, venue and student deletion keeps history by using
+  archived or cancelled states.
+
+The profile label in the sidebar comes from the active workspace membership and shows
+OWNER, ADMIN, OPERATOR or TEACHER. A linked student account shows STUDENT on the
+account view. The allowlisted `aniketpathak1@gmail.com` account also sees an Executive
+dashboard link, which opens `/executive` in a new tab; the route repeats the email
+authorization check on the server.
+
 ### 2. Activities, venues, classes and students
 
-Use **Venues** for locations and optional spaces. Use **Classes & events → Create** to
+Use **Venues** for locations and optional spaces. Use **Quick add → Class / event** to
 enter an activity name inline, choose course/event, group/one-to-one, default teachers
 and delivery details. Existing activity names are reused within the same workspace.
-One-to-one always has one seat. **Teachers** changes defaults for future occurrences.
+One-to-one always has one seat. The class table has one **Edit** action instead of
+separate enrollment, schedule and teacher icon buttons. Edit changes the class details,
+teachers and delivery defaults for future schedules without rewriting existing sessions.
 Add students from **Students**, including optional primary guardian contact. **Edit**
 updates those details. **Enroll student** on a course automatically books eligible
 future occurrences. **End** stops enrollment and releases future regular seats while
@@ -1043,6 +1100,7 @@ flowchart TD
 | --- | --- |
 | Create activity or venue with spaces | `POST /activities`, `POST /venues` |
 | Create class/course/event | `POST /programs` |
+| Edit class/course/event defaults | `PATCH /programs/{id}` |
 | Change default teachers | `PUT /programs/{id}/teachers` |
 | Add/edit student and primary guardian | `POST /students`, `PATCH /students/{id}` |
 | Enroll / end enrollment | `POST /programs/{id}/enrollments`, `POST /enrollments/{id}/end` |
@@ -1175,8 +1233,8 @@ an explicit future correction workflow; the API rejects that shortcut.
    migration runner before deploying this code. `/health` checks the web process only;
    verify a signed-in dashboard separately. Keep Render's existing `python run.py` start.
 6. Next implement workspace billing/materials migration, then deeper audit trails,
-   backup/restore rehearsals and pagination. Add password login and other identity
-   providers only with the deliberate account-linking workflow described above.
+   backup/restore rehearsals and pagination. Add other identity providers only with
+   the deliberate account-linking workflow described above.
 
 Mermaid blocks render in GitHub and in IntelliJ with its Mermaid Markdown support
 installed/enabled. They are README documentation, so no Mermaid JavaScript dependency
@@ -1353,6 +1411,31 @@ Migration 006 lets schedules store directly selected students as `DIRECT`
 participants without creating a long-running enrollment. Events still use `EVENT`;
 ongoing course enrollments still use `ENROLLMENT`.
 
+Run [007_default_workspace.sql](setup/migrations/007_default_workspace.sql),
+[008_notifications_otp_executive.sql](setup/migrations/008_notifications_otp_executive.sql)
+and [009_exclusive_staff_roles.sql](setup/migrations/009_exclusive_staff_roles.sql),
+[010_password_login_and_profiles.sql](setup/migrations/010_password_login_and_profiles.sql),
+[011_business_profiles_and_individual_limit.sql](setup/migrations/011_business_profiles_and_individual_limit.sql),
+then [012_terms_acceptance_audit.sql](setup/migrations/012_terms_acceptance_audit.sql)
+in order after migration 006:
+
+```bash
+python setup/apply_migration.py 007_default_workspace.sql
+python setup/apply_migration.py 008_notifications_otp_executive.sql
+python setup/apply_migration.py 009_exclusive_staff_roles.sql
+python setup/apply_migration.py 010_password_login_and_profiles.sql
+python setup/apply_migration.py 011_business_profiles_and_individual_limit.sql
+python setup/apply_migration.py 012_terms_acceptance_audit.sql
+```
+
+Migration 007 remembers a default workspace, migration 008 adds OTP/notification and
+executive telemetry tables, migration 009 enforces exclusive staff roles, migration
+010 adds password-profile fields, guardian identity links and the email-verification
+setting, migration 011 adds owner business profiles plus the individual-workspace
+limit, and migration 012 adds durable terms acceptance audit records preserved by
+the temporary data reset. Migration 009 stops if an existing pending invitation or membership has
+multiple staff roles; resolve that data explicitly, then rerun it.
+
 ### Responsive layout and browser verification
 
 The owner overview uses compact metric cards and workspace cards, with one Create
@@ -1365,6 +1448,14 @@ invitations, onboarding, account dashboards and workspace management for desktop
 and mobile browsers. On small screens navigation collapses into a Menu button,
 cards stack, tables scroll within their containers and dialogs fit the viewport.
 Mobile controls retain touch targets and form inputs use readable text sizes.
+
+Network-backed regions use reusable skeleton screens from `app/static/loading.js`.
+Workspace tabs, calendar month changes, account preferences, email OTP registration,
+executive metrics and all workspace save operations show the shape of the complete
+panel while its request is running. The regions expose `aria-busy` and a live loading
+announcement to assistive technology, and the shimmer stops automatically when the
+browser requests reduced motion. Loaders are removed in both success and error paths
+so a failed request remains actionable instead of leaving the page blocked.
 
 The browser regression check renders synthetic data without starting the app or
 connecting to a database. With Node, Playwright and Google Chrome installed:

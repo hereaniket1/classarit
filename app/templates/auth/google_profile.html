@@ -1,0 +1,39 @@
+{% extends "public_base.html" %}
+{% block title %}Complete profile · Classarit{% endblock %}
+{% block content %}
+<main class="login-layout google-profile-layout">
+  <section class="login-intro">
+    <p class="eyebrow">ONE LAST STEP</p>
+    <h1>Complete your<br>Classarit profile.</h1>
+    <p>Google has verified your email. Confirm your name, add a phone number if you want, and accept the terms to continue.</p>
+  </section>
+  <section class="login-card" id="google-profile-card" aria-labelledby="google-profile-title">
+    <div class="brand-mark">C</div>
+    <h2 id="google-profile-title">Welcome to Classarit</h2>
+    <p class="text-muted">Use the name teachers, admins and students should see.</p>
+    <form id="google-profile-form" class="password-login-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Full name<input class="form-control" name="full_name" autocomplete="name" required maxlength="150" value="{{ user.full_name or '' }}"></label>
+      <label>Phone number <span class="text-muted">optional</span><input class="form-control" name="phone" type="tel" autocomplete="tel" maxlength="30" value="{{ user.phone or '' }}" placeholder="Add later if you prefer"></label>
+      <label class="terms-check"><input type="checkbox" name="accepted_terms" value="true" required> I accept the <button type="button" class="terms-link" data-terms-open>Classarit terms and conditions</button></label>
+      <button type="submit" class="btn btn-primary">Continue</button>
+    </form>
+    <p id="google-profile-status" class="auth-form-status" role="status" aria-live="polite"></p>
+    <div class="terms-popup" id="terms-popup" hidden>
+      <div class="terms-popup-panel" role="dialog" aria-modal="true" aria-labelledby="terms-title">
+        <div class="terms-popup-head">
+          <h3 id="terms-title">Classarit terms and conditions</h3>
+          <button type="button" class="terms-close" data-terms-close aria-label="Close terms">×</button>
+        </div>
+        <div class="terms-popup-body">
+          <p>Classarit is provided as an early access teaching management tool. Information in the app is for organizing classes, schedules, students and workspace operations, and is not legal, tax, financial, medical or professional advice.</p>
+          <p>You are responsible for the accuracy of the information you enter, for getting any consent needed before adding another person’s information, and for using the service lawfully. Do not upload unlawful, harmful or sensitive information that you do not have permission to store.</p>
+          <p>The service may change, pause or lose availability during testing. Data may be corrected, removed or reset while the product is under development. Use your own records as the source of truth for payments, attendance and compliance until formal launch terms are published.</p>
+          <p>Classarit is provided without warranties during this demo period. To the extent allowed by law, liability is limited to stopping use of the service. Final commercial terms, privacy policy and compliance wording should be reviewed by a qualified attorney before public launch.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="/static/google-profile.js?v=google-profile-20260920" defer></script>
+{% endblock %}

@@ -46,7 +46,7 @@ app.include_router(workspace_router)
 
 @app.exception_handler(HTTPException)
 async def auth_errors(request: Request, exc: HTTPException):
-    if exc.status_code == 401 and (request.url.path in ('/dashboard','/legacy/dashboard','/executive') or request.url.path.startswith('/workspaces/')):
+    if exc.status_code == 401 and (request.url.path in ('/dashboard','/legacy/dashboard','/executive','/profile') or request.url.path.startswith('/workspaces/')):
         return RedirectResponse('/login',status_code=303)
     return JSONResponse({'detail':exc.detail},status_code=exc.status_code,headers=exc.headers)
 
@@ -56,7 +56,7 @@ async def private_responses(request: Request, call_next):
     started = time.perf_counter()
     response = await call_next(request)
     latency_ms = int((time.perf_counter() - started) * 1000)
-    if request.url.path.startswith(('/auth/', '/api/', '/uploads/', '/dashboard', '/login', '/workspaces/', '/invitations/', '/legacy/', '/executive', '/static/')):
+    if request.url.path.startswith(('/auth/', '/api/', '/uploads/', '/dashboard', '/login', '/profile', '/workspaces/', '/invitations/', '/legacy/', '/executive', '/static/')):
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'

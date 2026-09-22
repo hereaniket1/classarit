@@ -35,6 +35,9 @@ CREATE TABLE classarit.app_users (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     username citext UNIQUE,
     full_name text,
+    phone text CHECK (phone IS NULL OR length(btrim(phone)) BETWEEN 5 AND 30),
+    date_of_birth date CHECK (date_of_birth IS NULL OR date_of_birth <= CURRENT_DATE),
+    country text CHECK (country IS NULL OR length(btrim(country)) BETWEEN 2 AND 100),
     avatar_url text,
     base_currency varchar(3) NOT NULL DEFAULT 'USD'
         CHECK (base_currency ~ '^[A-Z]{3}$'),

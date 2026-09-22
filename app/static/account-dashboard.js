@@ -38,10 +38,13 @@ document.addEventListener("click", async (event) => {
   if (!button || button.disabled) return;
   event.preventDefault();
   const notice = document.querySelector("#notice");
+  const card = button.closest(".portfolio-card");
+  const loading = window.ClassaritLoading;
   const label = button.querySelector("span");
   const original = label ? label.textContent : button.textContent;
   button.disabled = true;
   if (label) label.textContent = "Saving…";
+  loading?.begin(card, "workspace preference", { rows: 3 });
   try {
     const selected = await setDefaultWorkspace(button.dataset.defaultWorkspace);
     document.querySelectorAll("[data-default-workspace]").forEach((item) => {
@@ -64,5 +67,7 @@ document.addEventListener("click", async (event) => {
       notice.textContent = error.message;
       notice.hidden = false;
     }
+  } finally {
+    loading?.end(card);
   }
 });

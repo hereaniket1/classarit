@@ -10,8 +10,7 @@ function saveOverlay() {
     overlay.hidden = true;
     overlay.setAttribute("role", "status");
     overlay.setAttribute("aria-live", "polite");
-    overlay.innerHTML =
-      '<div class="save-overlay-panel"><span class="calendar-spinner" aria-hidden="true"></span><strong>Saving changes</strong><small>Please wait while Classarit updates your data.</small></div>';
+    overlay.innerHTML = `<div class="save-overlay-panel skeleton-save">${window.ClassaritLoading?.panel("changes", 4) || '<p role="status">Saving changes…</p>'}</div>`;
     document.body.append(overlay);
   }
   return overlay;
@@ -20,7 +19,10 @@ function saveOverlay() {
 export function setSaving(active, message = "Saving changes") {
   const overlay = saveOverlay();
   savingCount = Math.max(0, savingCount + (active ? 1 : -1));
-  if (active) overlay.querySelector("strong").textContent = message;
+  if (active) {
+    const announcement = overlay.querySelector(".loading-announcement");
+    if (announcement) announcement.textContent = `${message}…`;
+  }
   const saving = savingCount > 0;
   overlay.hidden = !saving;
   document.body.classList.toggle("is-saving-data", saving);

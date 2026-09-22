@@ -136,8 +136,11 @@ def release(a, bid):
 def cancel(a, sid, p):
     from ..schemas import EntitlementInput
 
-    a.allow(*MANAGERS)
     session = a.session(sid)
+    if not a.roles.intersection({"OWNER", "ADMIN", "TEACHER"}):
+        raise HTTPException(
+            403, "Only an Owner, Admin or assigned Teacher can cancel this schedule."
+        )
     if session["status"] != "SCHEDULED":
         raise HTTPException(409, "Only scheduled sessions can be cancelled.")
     if a.db.first(

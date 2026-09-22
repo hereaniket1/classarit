@@ -1,4 +1,4 @@
-import { esc, withSaving } from "./api.js?v=workspace-reporting-20260915";
+import { esc, withSaving } from "./api.js?v=password-profile-20260917";
 const dialog = document.querySelector("#editor"),
   form = document.querySelector("#editor-form");
 function editorLoader() {
@@ -8,8 +8,8 @@ function editorLoader() {
     loader.className = "editor-save-loader";
     loader.setAttribute("role", "status");
     loader.setAttribute("aria-live", "polite");
-    loader.innerHTML =
-      '<span class="calendar-spinner" aria-hidden="true"></span><strong>Saving changes</strong><small>Please wait while Classarit updates your data.</small>';
+    loader.innerHTML = window.ClassaritLoading?.panel("form changes", 5) ||
+      '<p role="status">Saving changes…</p>';
     dialog.append(loader);
   }
   return loader;
@@ -20,7 +20,7 @@ export const field = (name, label, type = "text", options = {}) => ({
   type,
   ...options,
 });
-export function edit(title, fields, save) {
+export function edit(title, fields, save, options = {}) {
   const isControlList = (control) =>
     control && typeof control.length === "number" && !control.tagName;
   const controlsFor = (name) => {
@@ -36,6 +36,9 @@ export function edit(title, fields, save) {
   };
   editorLoader();
   document.querySelector("#editor-title").textContent = title;
+  const submit = form.querySelector("[type=submit]");
+  submit.textContent = options.submitLabel || "Save";
+  submit.className = `btn ${options.danger ? "btn-danger" : "btn-primary"}`;
   dialog.classList.remove("is-saving");
   document.querySelector("#editor-error").textContent = "";
   document.querySelector("#editor-fields").innerHTML = fields
@@ -50,6 +53,8 @@ export function edit(title, fields, save) {
       let input;
       if (f.type === "select" || f.type === "multiple")
         input = `<select class="form-select" ${attrs} ${f.type === "multiple" ? "multiple" : ""}>${(f.options || []).map((o) => `<option value="${esc(o.id)}" ${o.venue_id ? `data-venue="${esc(o.venue_id)}"` : ""} ${(Array.isArray(f.value) ? f.value.includes(o.id) : String(f.value ?? "") === String(o.id)) ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select>`;
+      else if (f.type === "textarea")
+        input = `<textarea class="form-control" ${attrs} rows="3">${esc(f.value ?? "")}</textarea>`;
       else
         input = `<input class="form-control" type="${f.type}" ${attrs} value="${esc(f.value ?? "")}" ${f.min !== undefined ? `min="${f.min}"` : ""} ${f.max !== undefined ? `max="${f.max}"` : ""}>`;
       return `<label data-field="${esc(f.name)}">${esc(f.label)}${input}${f.help ? `<small class="subtext">${esc(f.help)}</small>` : ""}</label>`;
@@ -87,10 +92,10 @@ export function edit(title, fields, save) {
   updateDependencies();
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const button = form.querySelector("[type=submit]");
+    const button = submit;
     const buttonText = button.textContent;
     button.disabled = true;
-    button.textContent = "Saving…";
+    button.textContent = options.progressLabel || "Saving…";
     dialog.classList.add("is-saving");
     try {
       const fd = new FormData(form),

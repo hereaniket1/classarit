@@ -22,7 +22,7 @@ def send_registration_otp(background_tasks: BackgroundTasks | None, email, full_
     html = (
         "<h2>Your Classarit verification code</h2>"
         + paragraph(f"Hi {full_name or 'there'},")
-        + paragraph("Use this code to finish creating your Classarit account. It expires in 10 minutes.")
+        + paragraph("Use this code to verify your Classarit email address. It expires in 10 minutes.")
         + f"<p style='font-size:28px;font-weight:700;letter-spacing:4px'>{escape(code)}</p>"
     )
     text = f"Your Classarit verification code is {code}. It expires in 10 minutes."

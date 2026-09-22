@@ -43,7 +43,7 @@ try{
  }
  for(const width of [320,390,768,1024,1440,1920]){
   await page.setViewportSize({width,height:900});
-  for(const name of ['owner','teacher','workspace','onboarding','invitation','home','login','callback']){
+  for(const name of ['owner','teacher','workspace','onboarding','invitation','home','login','callback','profile']){
    await page.goto('http://classarit.test/'+name,{waitUntil:'networkidle'});
    await fits(`${name} at ${width}`);
    if(width<=800 && await page.locator('.nav-toggle').count()){
@@ -62,9 +62,12 @@ try{
     assert.equal(await page.locator('.calendar-day').count(),30);
     assert.equal(await page.locator('.calendar-loader').count(),1);
     assert.equal(await page.locator('.month-calendar').getAttribute('aria-busy'),'false');
-    assert.equal(await page.locator('.calendar-day.past').count(),13);
+    const expectedPast=Number(new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Kolkata',day:'numeric'}).format(new Date()))-1;
+    assert.equal(await page.locator('.calendar-day.past').count(),expectedPast);
     assert.equal(await page.locator('.past-toggle').count(),0);
     assert.equal(await page.locator('.calendar-day.today').count(),1);
+    assert.equal(await page.locator('.quick-action').count(),3);
+    assert.equal(await page.locator('.quick-action:disabled').count(),0);
     await page.evaluate(()=>window.__noticeTest=Date.now());
     await page.evaluate(()=>import('/static/workspaces/api.js').then(({notice})=>notice('Saved successfully.')));
     assert.equal(await page.locator('#notice').isVisible(),true);
@@ -78,7 +81,7 @@ try{
     assert.equal(await page.locator('.calendar-day').count(),31);
     await page.getByRole('button',{name:'Current month'}).click();
     await page.waitForFunction(()=>document.querySelector('.month-calendar h2')?.textContent.includes('September 2026'));
-    assert.equal(await page.locator('.calendar-day.past').count(),13);
+    assert.equal(await page.locator('.calendar-day.past').count(),expectedPast);
     const targetDay=page.locator('.calendar-day.busy').first();
     await targetDay.click();
     assert.equal(await page.locator('#calendar-popup:not([hidden])').isVisible(),true);
@@ -113,19 +116,30 @@ try{
      assert.ok(await action.getAttribute('aria-label'));
     }
     if([390,1440].includes(width))await page.screenshot({path:path.join(fixtures,`workspace-${width}.png`),fullPage:true});
-    for(const section of ['calendar','classes','students','sessions','venues','team','makeups','reporting']){
+    for(const section of ['calendar','classes','students','sessions','venues','reporting','settings']){
      if(width<=800)await page.locator('.nav-toggle').click();
-     await page.locator(`[data-tab="${section}"]`).click();await fits(`workspace/${section} at ${width}`);
+     await page.locator(`[data-tab="${section}"]`).click();
+     await page.waitForFunction(()=>[...document.querySelectorAll('.quick-action')].every(button=>!button.disabled));
+     await fits(`workspace/${section} at ${width}`);
+     assert.equal(await page.locator('.quick-action').count(),3);
+     assert.equal(await page.locator('.quick-action:disabled').count(),0);
     }
     if(width<=800)await page.locator('.nav-toggle').click();
     await page.locator('[data-tab="classes"]').click();
-    await page.locator('[data-action="program"]').click();
+    await page.locator('.quick-action[data-action="program"]').click();
     const dialog=page.locator('#editor');assert.equal(await dialog.isVisible(),true);
     await fits(`class form at ${width}`);
     const box=await dialog.boundingBox();assert.ok(box.width<=width && box.x>=0);
     await page.locator('#close-editor').click();
    }
    if(name==='owner' && [390,1440].includes(width)){
+    assert.equal(await page.evaluate(()=>typeof window.ClassaritLoading?.begin),'function');
+    await page.evaluate(()=>window.ClassaritLoading.begin(document.querySelector('.portfolio-card'),'workspace card',{rows:2}));
+    assert.equal(await page.locator('.portfolio-card').first().getAttribute('aria-busy'),'true');
+    assert.equal(await page.locator('.portfolio-card').first().locator('[data-loading-overlay]').count(),1);
+    await page.evaluate(()=>window.ClassaritLoading.end(document.querySelector('.portfolio-card')));
+    assert.equal(await page.locator('.portfolio-card').first().getAttribute('aria-busy'),'false');
+    assert.equal(await page.locator('.portfolio-card').first().locator('[data-loading-overlay]').count(),0);
     if(width===390){const gear=await page.locator('.manage-workspace').first().boundingBox();assert.ok(gear.height>=44 && gear.width>=44);}
     await page.screenshot({path:path.join(fixtures,`owner-${width}.png`),fullPage:true});
    }
@@ -135,5 +149,5 @@ try{
  await page.locator('#workspace-picker').selectOption('second');
  await page.waitForURL('**/workspaces/second');
  assert.deepEqual(errors,[]);
- console.log('Passed: 8 pages at 6 viewport widths, workspace sections/forms, mobile navigation and gear touch targets.');
+ console.log('Passed: 9 pages at 6 viewport widths, workspace sections/forms, profile, mobile navigation and gear touch targets.');
 }finally{await browser.close();}

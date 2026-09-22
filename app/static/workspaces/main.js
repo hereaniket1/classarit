@@ -4,10 +4,10 @@ import {
   setCalendarLoading,
   setCalendarMonthData,
   updateCalendarView,
-} from "./calendar.js?v=workspace-reporting-20260915";
-import { api, clearNotice, request, notice, workspaceId } from "./api.js?v=workspace-reporting-20260915";
-import { render } from "./render.js?v=workspace-reporting-20260915";
-import { action } from "./actions.js?v=workspace-reporting-20260915";
+} from "./calendar.js?v=password-profile-20260917";
+import { api, clearNotice, request, notice, workspaceId } from "./api.js?v=password-profile-20260917";
+import { render } from "./render.js?v=password-profile-20260917";
+import { action } from "./actions.js?v=password-profile-20260917";
 let snapshot,
   loadVersion = 0,
   tab = document.body.dataset.teacherOnly === "true" ? "classes" : "calendar",
@@ -15,16 +15,15 @@ let snapshot,
   scheduleHistory = false;
 const allowedTabs =
   document.body.dataset.teacherOnly === "true"
-    ? ["classes", "sessions"]
+    ? ["classes", "sessions", "settings"]
     : [
         "calendar",
         "classes",
         "students",
         "sessions",
         "venues",
-        "team",
-        "makeups",
         ...(document.body.dataset.ownerView === "true" ? ["reporting"] : []),
+        "settings",
       ];
 const requestedTab = location.hash.slice(1) === "overview" ? "calendar" : location.hash.slice(1);
 if (allowedTabs.includes(requestedTab)) tab = requestedTab;
@@ -36,16 +35,32 @@ function activeTabButtons() {
 function content() {
   return document.querySelector("#workspace-content");
 }
+function setQuickActionsAvailable(available) {
+  document.querySelectorAll(".quick-action").forEach((control) => {
+    control.disabled = !available;
+  });
+}
 function showSectionLoading(label = "workspace") {
   const target = content();
   if (!target) return;
-  target.innerHTML = `<section class="workspace-card empty"><span class="calendar-spinner" aria-hidden="true"></span><p>Loading ${label}…</p></section>`;
+  setQuickActionsAvailable(false);
+  target.setAttribute("aria-busy", "true");
+  target.innerHTML = window.ClassaritLoading?.page(label) ||
+    `<section class="workspace-card empty"><p>Loading ${label}…</p></section>`;
   activeTabButtons();
+}
+function showSectionError() {
+  const target = content();
+  if (!target) return;
+  target.setAttribute("aria-busy", "false");
+  target.innerHTML = '<section class="workspace-card empty">This section could not be loaded. Choose it again to retry.</section>';
 }
 function draw() {
   const target = content();
   if (!target || !snapshot) return;
   target.innerHTML = render(snapshot, tab);
+  target.setAttribute("aria-busy", "false");
+  setQuickActionsAvailable(true);
   activeTabButtons();
 }
 function sectionPath(name, month, options = {}) {
@@ -79,7 +94,10 @@ async function loadTab(next = tab, options = {}) {
     if (tab === "calendar" && data.calendar) setCalendarMonthData(data.calendar);
     draw();
   } catch (error) {
-    if (version === loadVersion) notice(error.message, true);
+    if (version === loadVersion) {
+      showSectionError();
+      notice(error.message, true);
+    }
   }
 }
 async function refresh() {
@@ -125,17 +143,54 @@ function openWorkspace(value) {
   switchingWorkspace = true;
   window.location.assign(`/workspaces/${encodeURIComponent(value)}`);
 }
+function syncBusinessProfileFields(form) {
+  if (!form) return;
+  const type = form.elements.namedItem("workspace_type")?.value;
+  const panel = form.querySelector("#business-profile-fields");
+  if (!panel) return;
+  const needsBusinessProfile = type === "INSTITUTE";
+  panel.hidden = !needsBusinessProfile;
+  [
+    "business_legal_name",
+    "business_gstin",
+    "owner_aadhaar_number",
+    "business_address_line1",
+    "business_city",
+    "business_state",
+    "business_postal_code",
+    "business_country",
+  ].forEach((name) => {
+    const input = form.elements.namedItem(name);
+    if (input) input.required = needsBusinessProfile;
+  });
+}
+const onboardingForm = document.querySelector("#onboarding-form");
+syncBusinessProfileFields(onboardingForm);
+onboardingForm?.elements
+  .namedItem("workspace_type")
+  ?.addEventListener("change", () => syncBusinessProfileFields(onboardingForm));
 document
   .querySelector("#onboarding-form")
   ?.addEventListener("submit", async (e) => {
     e.preventDefault();
+    syncBusinessProfileFields(e.target);
     const button = e.target.querySelector("button");
     button.disabled = true;
     try {
+      const data = Object.fromEntries(new FormData(e.target));
+      if (data.workspace_type !== "INSTITUTE") {
+        for (const key of Object.keys(data)) {
+          if (key.startsWith("business_")) delete data[key];
+        }
+        delete data.owner_aadhaar_number;
+      }
+      if (data.business_gstin) data.business_gstin = data.business_gstin.toUpperCase();
+      if (data.owner_aadhaar_number) data.owner_aadhaar_number = data.owner_aadhaar_number.toUpperCase();
+      if (data.business_country) data.business_country = data.business_country.toUpperCase();
       const row = await request(
         "/api/workspaces",
         "POST",
-        Object.fromEntries(new FormData(e.target)),
+        data,
       );
       location.href = `/workspaces/${row.id}`;
     } catch (e) {

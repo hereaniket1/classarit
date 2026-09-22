@@ -9,10 +9,15 @@ class WorkspaceCases:
     def ws_setup(self, workspace_type="INDIVIDUAL"):
         csrf = self.login()
         self.headers = {"X-CSRF-Token": csrf}
+        payload = (
+            self.institute_payload("Music studio")
+            if workspace_type == "INSTITUTE"
+            else {"name": "Music studio", "workspace_type": workspace_type}
+        )
         r = self.client.post(
             "/api/workspaces",
             headers=self.headers,
-            json={"name": "Music studio", "workspace_type": workspace_type},
+            json=payload,
         )
         self.assertEqual(r.status_code, 201, r.text)
         self.w = r.json()["id"]
@@ -118,6 +123,7 @@ class WorkspaceCases:
                 "student_ids": [student["id"]],
             },
         )
+
         self.assertEqual(duplicate.status_code, 409, duplicate.text)
 
         small_group = self.new_program("Small group", capacity=1)
@@ -163,6 +169,69 @@ class WorkspaceCases:
             and row["student_id"] == event_student["id"]
         )
         self.assertEqual(participant["participation_kind"], "EVENT")
+
+    def test_program_details_can_be_updated_without_rewriting_sessions(self):
+        self.ws_setup()
+        program = self.new_program(capacity=3)
+        session = self.new_session(program)
+        response = self.client.patch(
+            self.base + "/programs/" + program["id"],
+            headers=self.headers,
+            json={
+                "name": "Advanced algebra",
+                "activity_name": "Mathematics",
+                "category": "ACADEMIC",
+                "program_kind": "COURSE",
+                "teaching_format": "GROUP",
+                "capacity": 2,
+                "level": "Grade 9",
+                "description": "Weekly algebra practice",
+                "default_duration_minutes": 45,
+                "default_delivery_mode": "ONLINE",
+                "default_meeting_url": "https://meet.example.com/algebra",
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        updated = response.json()
+        self.assertEqual(updated["name"], "Advanced algebra")
+        self.assertEqual(updated["capacity"], 2)
+        self.assertEqual(updated["description"], "Weekly algebra practice")
+        section = self.client.get(self.base + "/section/classes").json()
+        activity = next(
+            row
+            for row in section["activities"]
+            if row["id"] == updated["activity_id"]
+        )
+        self.assertEqual(activity["name"], "Mathematics")
+        saved_session = next(
+            row
+            for row in self.client.get(self.base + "/snapshot").json()["sessions"]
+            if row["id"] == session["id"]
+        )
+        self.assertEqual(
+            saved_session["meeting_url"], "https://meet.example.com/piano"
+        )
+
+        student = self.post("/students", {"full_name": "Enrolled student"})
+        self.post(
+            "/programs/" + program["id"] + "/enrollments",
+            {"student_id": student["id"], "starts_on": "2020-01-01"},
+        )
+        response = self.client.patch(
+            self.base + "/programs/" + program["id"],
+            headers=self.headers,
+            json={
+                "name": "Advanced algebra",
+                "activity_name": "Mathematics",
+                "category": "ACADEMIC",
+                "program_kind": "EVENT",
+                "teaching_format": "GROUP",
+                "capacity": 2,
+                "default_delivery_mode": "ONLINE",
+                "default_meeting_url": "https://meet.example.com/algebra",
+            },
+        )
+        self.assertEqual(response.status_code, 409, response.text)
 
 
     def test_recurring_weekly_schedule_generates_selected_days(self):
@@ -503,7 +572,7 @@ class WorkspaceCases:
         workspace2 = self.client.post(
             "/api/workspaces",
             headers=self.headers,
-            json={"name": "Second", "workspace_type": "INSTITUTE"},
+            json=self.institute_payload("Second"),
         ).json()
         r = self.client.post(
             "/api/workspaces/"

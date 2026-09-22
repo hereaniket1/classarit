@@ -60,6 +60,64 @@ def teachers(a, ids):
     return ids
 
 
+def _activity_id(a, p):
+    if p.activity_id:
+        a.db.get("activities", a.id, p.activity_id)
+        return p.activity_id
+    name = (p.activity_name or "").strip()
+    if not name:
+        raise HTTPException(422, "Choose or name an activity.")
+    row = a.db.first(
+        "SELECT id FROM {s}.activities WHERE workspace_id=:w AND lower(btrim(name))=lower(:n)",
+        w=a.id,
+        n=name,
+    )
+    return (
+        row
+        or a.db.insert(
+            "activities", workspace_id=a.id, name=name, category=p.category
+        )
+    )["id"]
+
+
+def _program_fields(a, p):
+    url, venue_id, space_id = location(
+        a,
+        p.default_delivery_mode,
+        p.default_meeting_url,
+        p.default_venue_id,
+        p.default_space_id,
+    )
+    fields = p.model_dump(
+        exclude={"teacher_ids", "activity_id", "activity_name", "category"}
+    )
+    fields.update(
+        activity_id=_activity_id(a, p),
+        default_meeting_url=url,
+        default_venue_id=venue_id,
+        default_space_id=space_id,
+    )
+    if p.teaching_format == "ONE_TO_ONE":
+        fields["capacity"] = 1
+    return fields
+
+
+def _replace_program_teachers(a, program_id, teacher_ids):
+    a.db.execute(
+        "DELETE FROM {s}.program_teachers WHERE workspace_id=:w AND program_id=:p",
+        w=a.id,
+        p=program_id,
+    )
+    for index, membership_id in enumerate(teacher_ids):
+        a.db.execute(
+            "INSERT INTO {s}.program_teachers(workspace_id,program_id,membership_id,assignment_type) VALUES (:w,:p,:m,:kind)",
+            w=a.id,
+            p=program_id,
+            m=membership_id,
+            kind="LEAD" if index == 0 else "ASSISTANT",
+        )
+
+
 def activity(a, p):
     a.allow(*MANAGERS)
     return a.db.insert("activities", workspace_id=a.id, **p.model_dump())
@@ -81,12 +139,46 @@ def venue(a, p):
     return row
 
 
+def _verified_user_id(a, email):
+    email = (email or "").strip().lower()
+    if not email:
+        return None
+    row = a.db.first(
+        """SELECT e.app_user_id FROM {s}.user_emails e
+        JOIN {s}.app_users u ON u.id=e.app_user_id
+        WHERE lower(e.email::text)=:email AND e.verified_at IS NOT NULL
+          AND u.status='ACTIVE' ORDER BY e.is_primary DESC LIMIT 1""",
+        email=email,
+    )
+    return row["app_user_id"] if row else None
+
+
+def _student_link_id(a, email, student_id=None):
+    user_id = _verified_user_id(a, email)
+    if not user_id:
+        return None
+    existing = a.db.first(
+        """SELECT id FROM {s}.students
+        WHERE workspace_id=:w AND linked_user_id=:u
+          AND (CAST(:student_id AS uuid) IS NULL OR id<>CAST(:student_id AS uuid))
+        LIMIT 1""",
+        w=a.id,
+        u=user_id,
+        student_id=str(student_id) if student_id else None,
+    )
+    return None if existing else user_id
+
+
 def student(a, p):
     a.allow(*MANAGERS)
+    fields = p.model_dump(
+        exclude={"guardian_name", "guardian_email", "guardian_phone"}
+    )
+    fields["linked_user_id"] = _student_link_id(a, p.email)
     row = a.db.insert(
         "students",
         workspace_id=a.id,
-        **p.model_dump(exclude={"guardian_name", "guardian_email", "guardian_phone"}),
+        **fields,
     )
     if p.guardian_name:
         guardian = a.db.insert(
@@ -95,6 +187,7 @@ def student(a, p):
             full_name=p.guardian_name,
             email=p.guardian_email,
             phone=p.guardian_phone,
+            linked_user_id=_verified_user_id(a, p.guardian_email),
         )
         a.db.execute(
             "INSERT INTO {s}.student_guardians(workspace_id,student_id,guardian_id,relationship,is_primary) VALUES (:w,:s,:g,'GUARDIAN',true)",
@@ -107,55 +200,161 @@ def student(a, p):
 
 def program(a, p):
     a.allow(*MANAGERS)
-    aid = p.activity_id
-    if aid:
-        a.db.get("activities", a.id, aid)
-    else:
-        name = (p.activity_name or "").strip()
-        if not name:
-            raise HTTPException(422, "Choose or name an activity.")
-        row = a.db.first(
-            "SELECT id FROM {s}.activities WHERE workspace_id=:w AND lower(btrim(name))=lower(:n)",
-            w=a.id,
-            n=name,
-        )
-        aid = (
-            row
-            or a.db.insert(
-                "activities", workspace_id=a.id, name=name, category=p.category
-            )
-        )["id"]
     ids = teachers(
         a, p.teacher_ids or ([a.member["id"]] if "TEACHER" in a.roles else [])
     )
-    url, vid, sid = location(
-        a,
-        p.default_delivery_mode,
-        p.default_meeting_url,
-        p.default_venue_id,
-        p.default_space_id,
-    )
-    fields = p.model_dump(
-        exclude={"teacher_ids", "activity_id", "activity_name", "category"}
-    )
-    fields.update(
-        activity_id=aid,
-        default_meeting_url=url,
-        default_venue_id=vid,
-        default_space_id=sid,
-    )
-    if p.teaching_format == "ONE_TO_ONE":
-        fields["capacity"] = 1
+    fields = _program_fields(a, p)
     row = a.db.insert("teaching_programs", workspace_id=a.id, status="ACTIVE", **fields)
-    for i, mid in enumerate(ids):
-        a.db.execute(
-            "INSERT INTO {s}.program_teachers(workspace_id,program_id,membership_id,assignment_type) VALUES (:w,:p,:m,:t)",
-            w=a.id,
-            p=row["id"],
-            m=mid,
-            t="LEAD" if i == 0 else "ASSISTANT",
-        )
+    _replace_program_teachers(a, row["id"], ids)
     return row
+
+
+def update_program(a, program_id, p):
+    """Update future class defaults without rewriting existing session history."""
+    a.allow(*MANAGERS)
+    a.program(program_id)
+    current_teachers = [
+        row["membership_id"]
+        for row in a.db.all(
+            "SELECT membership_id FROM {s}.program_teachers WHERE workspace_id=:w AND program_id=:p ORDER BY assignment_type DESC,created_at",
+            w=a.id,
+            p=program_id,
+        )
+    ]
+    teacher_ids = teachers(a, p.teacher_ids or current_teachers)
+    fields = _program_fields(a, p)
+    active_enrollments = a.db.first(
+        "SELECT count(*) n FROM {s}.enrollments WHERE workspace_id=:w AND program_id=:p AND status IN ('ACTIVE','PAUSED')",
+        w=a.id,
+        p=program_id,
+    )["n"]
+    if p.program_kind == "EVENT" and active_enrollments:
+        raise HTTPException(
+            409, "End active enrollments before changing this class to an event."
+        )
+    if fields["capacity"] < active_enrollments:
+        raise HTTPException(
+            409,
+            f"Capacity cannot be below the {active_enrollments} active enrollments.",
+        )
+    a.db.execute(
+        "UPDATE {s}.teaching_programs SET "
+        + ",".join(f"{key}=:{key}" for key in fields)
+        + " WHERE workspace_id=:w AND id=:id",
+        w=a.id,
+        id=program_id,
+        **fields,
+    )
+    _replace_program_teachers(a, program_id, teacher_ids)
+    return a.db.get("teaching_programs", a.id, program_id)
+
+
+def archive_program(a, program_id):
+    program = a.program(program_id)
+    if not (
+        a.roles.intersection({"OWNER", "ADMIN"})
+        or "TEACHER" in a.roles
+    ):
+        raise HTTPException(403, "Only an Owner, Admin or assigned Teacher can delete a class.")
+    if program["status"] == "ARCHIVED":
+        raise HTTPException(409, "This class has already been deleted.")
+    a.db.execute(
+        "UPDATE {s}.teaching_programs SET status='ARCHIVED' WHERE workspace_id=:w AND id=:p",
+        w=a.id,
+        p=program_id,
+    )
+    a.db.execute(
+        "UPDATE {s}.enrollments SET status='CANCELLED' WHERE workspace_id=:w AND program_id=:p AND status IN ('ACTIVE','PAUSED')",
+        w=a.id,
+        p=program_id,
+    )
+    cancelled = a.db.execute(
+        """UPDATE {s}.class_sessions
+        SET status='CANCELLED',cancelled_at=CURRENT_TIMESTAMP,cancellation_reason='Class deleted'
+        WHERE workspace_id=:w AND program_id=:p AND status='SCHEDULED' AND starts_at>CURRENT_TIMESTAMP
+        RETURNING id""",
+        w=a.id,
+        p=program_id,
+    ).fetchall()
+    a.db.execute(
+        "UPDATE {s}.recurring_session_series SET status='ARCHIVED' WHERE workspace_id=:w AND program_id=:p AND status='ACTIVE'",
+        w=a.id,
+        p=program_id,
+    )
+    return {"ok": True, "cancelled_session_ids": [str(row[0]) for row in cancelled]}
+
+
+def archive_venue(a, venue_id):
+    a.allow("OWNER", "ADMIN")
+    venue = a.db.get("venues", a.id, venue_id)
+    if venue.get("archived_at"):
+        raise HTTPException(409, "This venue has already been deleted.")
+    if a.db.first(
+        "SELECT 1 FROM {s}.teaching_programs WHERE workspace_id=:w AND default_venue_id=:v AND status='ACTIVE' LIMIT 1",
+        w=a.id,
+        v=venue_id,
+    ):
+        raise HTTPException(409, "Change the venue on active classes before deleting it.")
+    if a.db.first(
+        "SELECT 1 FROM {s}.class_sessions WHERE workspace_id=:w AND venue_id=:v AND status='SCHEDULED' AND starts_at>CURRENT_TIMESTAMP LIMIT 1",
+        w=a.id,
+        v=venue_id,
+    ):
+        raise HTTPException(409, "Move or cancel upcoming schedules at this venue first.")
+    a.db.execute(
+        "UPDATE {s}.venues SET archived_at=CURRENT_TIMESTAMP WHERE workspace_id=:w AND id=:v",
+        w=a.id,
+        v=venue_id,
+    )
+    a.db.execute(
+        "UPDATE {s}.venue_spaces SET archived_at=CURRENT_TIMESTAMP WHERE workspace_id=:w AND venue_id=:v",
+        w=a.id,
+        v=venue_id,
+    )
+    return {"ok": True}
+
+
+def archive_student(a, student_id):
+    a.allow("OWNER", "ADMIN")
+    student = a.db.get("students", a.id, student_id)
+    if student["status"] == "ARCHIVED":
+        raise HTTPException(409, "This student has already been deleted.")
+    session_ids = [
+        str(row["session_id"])
+        for row in a.db.all(
+            """SELECT DISTINCT p.session_id FROM {s}.session_participants p
+            JOIN {s}.class_sessions ss ON ss.workspace_id=p.workspace_id AND ss.id=p.session_id
+            WHERE p.workspace_id=:w AND p.student_id=:st AND p.status='BOOKED'
+              AND ss.status='SCHEDULED' AND ss.starts_at>CURRENT_TIMESTAMP""",
+            w=a.id,
+            st=student_id,
+        )
+    ]
+    a.db.execute(
+        "UPDATE {s}.students SET status='ARCHIVED' WHERE workspace_id=:w AND id=:st",
+        w=a.id,
+        st=student_id,
+    )
+    a.db.execute(
+        "UPDATE {s}.enrollments SET status='CANCELLED' WHERE workspace_id=:w AND student_id=:st AND status IN ('ACTIVE','PAUSED')",
+        w=a.id,
+        st=student_id,
+    )
+    a.db.execute(
+        """UPDATE {s}.session_participants p SET status='CANCELLED'
+        FROM {s}.class_sessions ss
+        WHERE p.workspace_id=:w AND p.student_id=:st AND p.status='BOOKED'
+          AND ss.workspace_id=p.workspace_id AND ss.id=p.session_id
+          AND ss.status='SCHEDULED' AND ss.starts_at>CURRENT_TIMESTAMP""",
+        w=a.id,
+        st=student_id,
+    )
+    a.db.execute(
+        "UPDATE {s}.makeup_entitlements SET status='WAIVED' WHERE workspace_id=:w AND student_id=:st AND status='OPEN'",
+        w=a.id,
+        st=student_id,
+    )
+    return {"ok": True, "session_ids": session_ids}
 
 
 def enroll(a, pid, p):
@@ -197,6 +396,7 @@ def update_student(a, student_id, p):
     a.allow(*MANAGERS)
     a.db.get("students", a.id, student_id)
     fields = p.model_dump(exclude={"guardian_name", "guardian_email", "guardian_phone"})
+    fields["linked_user_id"] = _student_link_id(a, p.email, student_id)
     a.db.execute(
         "UPDATE {s}.students SET "
         + ",".join(f"{k}=:{k}" for k in fields)
@@ -213,10 +413,11 @@ def update_student(a, student_id, p):
     if p.guardian_name:
         if guardian:
             a.db.execute(
-                "UPDATE {s}.guardians SET full_name=:n,email=:e,phone=:p WHERE workspace_id=:w AND id=:id",
+                "UPDATE {s}.guardians SET full_name=:n,email=:e,phone=:p,linked_user_id=:u WHERE workspace_id=:w AND id=:id",
                 n=p.guardian_name,
                 e=p.guardian_email,
                 p=p.guardian_phone,
+                u=_verified_user_id(a, p.guardian_email),
                 w=a.id,
                 id=guardian["guardian_id"],
             )
@@ -227,6 +428,7 @@ def update_student(a, student_id, p):
                 full_name=p.guardian_name,
                 email=p.guardian_email,
                 phone=p.guardian_phone,
+                linked_user_id=_verified_user_id(a, p.guardian_email),
             )
             a.db.execute(
                 "INSERT INTO {s}.student_guardians(workspace_id,student_id,guardian_id,relationship,is_primary) VALUES (:w,:st,:g,'GUARDIAN',true)",
@@ -260,19 +462,7 @@ def assign_teachers(a, pid, p):
     a.allow(*MANAGERS)
     a.program(pid)
     ids = teachers(a, p.teacher_ids)
-    a.db.execute(
-        "DELETE FROM {s}.program_teachers WHERE workspace_id=:w AND program_id=:p",
-        w=a.id,
-        p=pid,
-    )
-    for index, mid in enumerate(ids):
-        a.db.execute(
-            "INSERT INTO {s}.program_teachers(workspace_id,program_id,membership_id,assignment_type) VALUES (:w,:p,:m,:kind)",
-            w=a.id,
-            p=pid,
-            m=mid,
-            kind="LEAD" if index == 0 else "ASSISTANT",
-        )
+    _replace_program_teachers(a, pid, ids)
     return {
         "ok": True,
         "detail": "Defaults updated. Existing session assignments are unchanged.",

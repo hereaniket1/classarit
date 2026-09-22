@@ -36,6 +36,7 @@ const data = {
     id: "workspace",
     name: "Test",
     timezone: "Asia/Kolkata",
+    currency: "INR",
     workspace_type: "INDIVIDUAL",
   },
   roles: ["OWNER", "TEACHER"],
@@ -153,22 +154,26 @@ for (const tab of [
   "classes",
   "students",
   "venues",
-  "team",
   "sessions",
-  "makeups",
   "reporting",
+  "settings",
 ]) {
   const html = render(structuredClone(data), tab);
   assert.ok(html.length > 0);
   assert.ok(!html.includes("<img src=x"));
   assert.ok(!html.includes("[object Object]"));
 }
+const classesHtml = render(structuredClone(data), "classes");
+assert.ok(classesHtml.includes('data-action="edit-program"'));
+assert.ok(!classesHtml.includes('data-action="enroll"'));
+assert.ok(!classesHtml.includes('data-action="teachers"'));
 const form = document.querySelector("#editor-form");
 for (const [key, id] of [
   ["student", ""],
   ["edit-student", "student"],
   ["venue", ""],
   ["program", ""],
+  ["edit-program", "program"],
   ["teachers", "program"],
   ["enroll", "program"],
   ["session", "program"],
@@ -185,6 +190,12 @@ for (const [key, id] of [
   ["complete", "session"],
   ["end-enrollment", "enrollment"],
   ["disable-series", "series"],
+  ["edit-workspace", ""],
+  ["delete-workspace", ""],
+  ["delete-program", "program"],
+  ["delete-session", "session"],
+  ["delete-venue", "venue"],
+  ["delete-student", "student"],
 ]) {
   action(structuredClone(data), key, id, async () => {});
   assert.ok(document.querySelector("#editor").open, key);
@@ -218,6 +229,15 @@ form.elements.activity_name.value = "Piano";
 form.elements.teaching_format.value = "ONE_TO_ONE";
 form.onchange();
 assert.equal(form.elements.capacity.value, "1");
+document.querySelector("#editor").close();
+action(structuredClone(data), "edit-program", "program", async () => {});
+assert.equal(form.elements.name.value, "Piano");
+assert.equal(form.elements.activity_name.value, "Piano");
+assert.equal(form.elements.capacity.value, "10");
+assert.deepEqual(
+  [...form.elements.teacher_ids.selectedOptions].map((option) => option.value),
+  ["member"],
+);
 await form.onsubmit({ preventDefault() {} });
 assert.ok(document.querySelector("#save-overlay"));
 assert.ok(document.querySelector(".editor-save-loader"));
