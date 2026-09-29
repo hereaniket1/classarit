@@ -72,6 +72,7 @@
                 </button>
               </div>
               {% endif %}
+              {% if organization_account %}
               <label class="workspace-picker"><span>Switch workspace</span>
                 {{ icon('workspaces') }}
                 <select id="workspace-picker" aria-label="Switch workspace" title="Switch workspace">
@@ -80,6 +81,7 @@
                   {% endfor %}
                 </select>
               </label>
+              {% endif %}
 
               {% endif %}
             </div>
@@ -105,7 +107,7 @@
           <h2>Set up your teaching space</h2>
           <p>
             Individual teachers use one workspace. Companies and institutes can
-            create multiple workspaces under one business profile.
+            create up to three workspaces under one business profile during early access.
           </p>
           <form id="onboarding-form">
             <label
@@ -117,13 +119,18 @@
                 placeholder="e.g. Aniket’s Music Studio" /></label
             ><label
               >I’m setting up<select class="form-select" name="workspace_type">
-                <option value="INDIVIDUAL">
+                {% if account_type != 'ORGANIZATION' %}<option value="INDIVIDUAL">
                   Independent teacher
-                </option>
-                <option value="INSTITUTE">Company or organization</option>
+                </option>{% endif %}
+                {% if account_type != 'INDIVIDUAL' %}<option value="INSTITUTE">Company or organization</option>{% endif %}
               </select></label
             >
+            <p class="subtext">{% if account_type %}Your workspace type matches your {{ 'organization' if account_type == 'ORGANIZATION' else 'individual' }} account.{% else %}Your account type is saved with your first workspace.{% endif %}</p>
+            {% if business_profile %}
+            <div class="workspace-card"><strong>{{ business_profile.legal_name }}</strong><p class="subtext">Your saved organization identity will be reused. No need to enter GSTIN or Aadhaar again.</p></div>
+            {% else %}
             <div id="business-profile-fields" hidden>
+              <p class="subtext">Enter your organization identity once. It will be reused for future workspaces.</p>
               <label
                 >Legal business name<input
                   class="form-control"
@@ -185,6 +192,7 @@
                 >
               </div>
             </div>
+            {% endif %}
             <div class="form-grid">
               <label
                 >Timezone<select class="form-select" name="timezone" required>

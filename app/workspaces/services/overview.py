@@ -101,9 +101,9 @@ def dashboard_data(db, user):
             "classes": sum(len(w["programs"]) for w in owned),
             "active_teachers": len({r["user_id"] for r in teacher_rows}),
         },
-        "can_create": user["user_type"] == "OWNER"
+        "can_create": (user["user_type"] == "OWNER"
         or not db.first(
             "SELECT 1 FROM {s}.workspace_memberships WHERE user_id=:u", u=user["id"]
-        ),
+        )) and not any(w['workspace_type']=='INDIVIDUAL' for w in owned) and len(owned) < 3,
         "is_owner": user["user_type"] == "OWNER",
     }

@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="/static/responsive.css?v=password-profile-20260917">
   <script src="/static/loading.js?v=password-profile-20260917" defer></script>
   <script type="module" src="/static/executive.js?v=password-profile-20260917"></script>
+  <script type="module" src="/static/executive-admissions.js"></script>
 </head>
 <body>
 <div class="workspace-shell executive-shell">
@@ -33,6 +34,19 @@
     <section class="workspace-card executive-card" id="executive-settings-card">
       <div class="section-heading"><h2>Product controls</h2><p class="subtext">Changes apply immediately.</p></div>
       <div class="setting-grid" id="settings-grid"></div>
+    </section>
+    <section class="workspace-card executive-card" aria-labelledby="requests-title">
+      <div class="section-heading"><div><h2 id="requests-title">Invitation requests</h2><p class="subtext">Review access requests. Approve first, then send the invitation email.</p></div>
+        <label>Status<select id="request-filter" class="form-select"><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option><option value="ALL">All requests</option></select></label>
+      </div>
+      <p id="requests-status" role="status" aria-live="polite"></p>
+      <div class="table-scroll"><table class="workspace-table"><thead><tr><th>Applicant</th><th>Account</th><th>Requested</th><th>Status</th><th>Invitation email</th><th>Actions</th></tr></thead><tbody id="request-rows"></tbody></table></div>
+      <div class="row-actions"><button type="button" id="requests-prev" class="btn btn-outline-primary" disabled>Previous</button><button type="button" id="requests-next" class="btn btn-outline-primary" disabled>Next</button></div>
+    </section>
+    <section class="workspace-card executive-card" aria-labelledby="terms-editor-title">
+      <h2 id="terms-editor-title">Signup terms</h2><p class="subtext">Plain text shown during signup and Google profile setup. Each saved version is identified in new acceptance records.</p>
+      <form id="terms-editor"><label>Title<input class="form-control" name="title" required maxlength="200"></label><label>Terms<textarea class="form-control" name="body" rows="10" required maxlength="30000"></textarea></label><button class="btn btn-primary" type="submit" disabled>Save terms</button></form>
+      <p id="terms-editor-status" role="status" aria-live="polite"></p>
     </section>
     <section class="workspace-card executive-card" id="executive-latency-card">
       <div class="section-heading"><h2>API latency · last 7 days</h2><p class="subtext" id="api-total"></p></div>

@@ -1,12 +1,13 @@
 """CTO/CEO executive dashboard for product controls and performance."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..auth.dependencies import require_dashboard_user
 from ..services import maintenance, telemetry
+from ..services import content
 from ..services.product_settings import all_settings, set_settings
 from ..views import templates
 
@@ -15,6 +16,7 @@ EXECUTIVE_EMAILS = {"aniketpathak1@gmail.com"}
 
 
 class ExecutiveSettingsInput(BaseModel):
+    invite_request_enabled: bool | None = None
     google_new_accounts_enabled: bool | None = None
     signup_enabled: bool | None = None
     email_verification_enabled: bool | None = None
@@ -25,10 +27,26 @@ class ExecutiveFlushInput(BaseModel):
     confirmation: str
 
 
+class TermsInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=30000)
+
+
 def require_executive(user=Depends(require_dashboard_user)):
     if (user.get("email") or "").lower() not in EXECUTIVE_EMAILS:
         raise HTTPException(403, "This dashboard is restricted.")
     return user
+
+
+@router.get('/api/executive/terms')
+def read_terms(user=Depends(require_executive)):
+    return content.terms()
+
+
+@router.put('/api/executive/terms')
+def update_terms(payload: TermsInput, user=Depends(require_executive)):
+    return content.save_terms(payload.title, payload.body, user['id'])
 
 
 def context(request, user, **extra):

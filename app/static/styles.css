@@ -114,3 +114,6 @@ body {
   .content { padding: 18px; }
   .topbar { flex-direction: column; }
 }
+.invitation-request-card { margin: 24px 0; padding: 20px; border: 1px solid #dbe5f1; border-radius: 16px; background: #f5f8fd; }
+.invitation-request-card h3 { font-size: 1.2rem; }
+.invitation-request-card label { display: block; margin-bottom: 12px; }

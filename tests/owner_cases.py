@@ -26,7 +26,7 @@ class OwnerCases:
         return client, {"X-CSRF-Token": csrf}
 
     def test_owner_dashboard_ranking_and_explicit_navigation(self):
-        self.ws_setup()
+        self.ws_setup('INSTITUTE')
         one = self.post("/students", {"full_name": "One"})
         two = self.post("/students", {"full_name": "Two"})
         piano = self.new_program("Piano")
@@ -108,6 +108,9 @@ class OwnerCases:
 
     def test_individual_owner_is_limited_to_one_individual_workspace(self):
         self.ws_setup()
+        detail = self.client.get("/workspaces/" + self.w)
+        self.assertEqual(detail.status_code, 200, detail.text)
+        self.assertNotIn("Switch workspace", detail.text)
         blocked = self.client.post(
             "/api/workspaces",
             headers=self.headers,
@@ -120,7 +123,8 @@ class OwnerCases:
             headers=self.headers,
             json=self.institute_payload("Second business"),
         )
-        self.assertEqual(company.status_code, 201, company.text)
+        self.assertEqual(company.status_code, 409, company.text)
+        self.assertIn('account type', company.text)
 
     def test_institute_workspace_requires_business_profile(self):
         self.login()
@@ -176,7 +180,7 @@ class OwnerCases:
         self.assertEqual(users, 0)
         self.assertEqual(workspaces, 0)
         self.assertEqual(sessions, 0)
-        self.assertEqual(settings, 4)
+        self.assertEqual(settings, 5)
         self.assertGreater(migrations, 0)
         self.assertEqual(terms_after_flush, terms_before)
         self.assertFalse(self.client.get("/auth/me").json()["authenticated"])
@@ -724,7 +728,7 @@ class OwnerCases:
         self.assertIn("Overview", self.client.get("/dashboard?overview=1").text)
 
     def test_active_teachers_count_unique_people_across_owned_workspaces(self):
-        self.ws_setup()
+        self.ws_setup('INSTITUTE')
         first=self.w
         second=self.client.post('/api/workspaces',headers=self.headers,json=self.institute_payload('Second')).json()['id']
         other,headers=self.another_user()

@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from .database import auth_engine, schema_name
 from .settings import session_signing_key
 from ..services.product_settings import setting_enabled
+from ..services.admissions import admission_type
 
 
 class AccountUnavailable(Exception):
@@ -28,6 +29,7 @@ class InvalidVerificationCode(AccountUnavailable):
     """Internal signal used so a failed-attempt increment can commit."""
 
 
+ACCOUNT_EXISTS_MESSAGE = 'An account already exists for this email. Please log in.'
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 PASSWORD_HASHER = PasswordHasher(
     time_cost=3,
@@ -40,6 +42,15 @@ PASSWORD_HASHER = PasswordHasher(
 # through timing differences.
 DUMMY_PASSWORD_HASH = PASSWORD_HASHER.hash("classarit-dummy-password-never-used")
 TERMS_VERSION = "demo-2026-09-20"
+ACCOUNT_TYPES = {'INDIVIDUAL', 'ORGANIZATION'}
+
+
+def resolve_account_type(selected, admitted=None):
+    if selected not in ACCOUNT_TYPES:
+        raise AccountUnavailable('Choose an Individual or Organization account.')
+    if admitted and selected != admitted:
+        raise AccountUnavailable('Choose the account type approved for this invitation request.')
+    return admitted or selected
 
 
 def normalize_email(email):
@@ -70,7 +81,7 @@ def _metadata_hash(value):
     return hmac.new(session_signing_key().encode(), value.encode(), hashlib.sha256).hexdigest()
 
 
-def record_terms_acceptance(user_id, email=None, full_name=None, source="PASSWORD_SIGNUP", ip=None, user_agent=None):
+def record_terms_acceptance(user_id, email=None, full_name=None, source="PASSWORD_SIGNUP", ip=None, user_agent=None, version=None):
     s = schema_name()
     with auth_engine().begin() as conn:
         conn.execute(
@@ -84,7 +95,7 @@ def record_terms_acceptance(user_id, email=None, full_name=None, source="PASSWOR
                 "u": UUID(str(user_id)),
                 "email": normalize_email(email) if email else None,
                 "name": (full_name or None),
-                "version": TERMS_VERSION,
+                "version": version or TERMS_VERSION,
                 "source": source,
                 "ip_hash": _metadata_hash(ip),
                 "user_agent_hash": _metadata_hash(user_agent),
@@ -127,7 +138,7 @@ def _link_verified_contacts(conn, user_id, email):
     )
 
 
-def google_account(claims):
+def google_account(claims, invitation_token=None):
     """Resolve Google identity; link only to an already verified email account."""
     subject = claims.get("sub")
     email = (claims.get("email") or "").strip().lower()
@@ -173,6 +184,7 @@ def google_account(claims):
                     else:
                         if not setting_enabled("google_new_accounts_enabled", True):
                             raise AccountUnavailable("New Google accounts are disabled")
+                        account_type = admission_type(conn, email, invitation_token)
                         user_id = uuid4()
                         is_new_user = True
                         conn.execute(text(f'''INSERT INTO {s}.app_users(id,full_name,avatar_url,status)
@@ -180,6 +192,8 @@ def google_account(claims):
                             {"id": user_id, "name": claims.get('name') or email, "picture": claims.get('picture')})
                         conn.execute(text(f'''INSERT INTO {s}.user_emails(app_user_id,email,is_primary,verified_at)
                             VALUES (:id,:email,true,CURRENT_TIMESTAMP)'''), {"id": user_id, "email": email})
+                        conn.execute(text(f'UPDATE {s}.app_users SET account_type=:kind WHERE id=:id'),
+                                     {'kind': account_type, 'id': user_id})
                     if existing:
                         conn.execute(
                             text(f'''UPDATE {s}.user_emails
@@ -221,7 +235,7 @@ def session_user(token):
     s = schema_name()
     with auth_engine().connect() as conn:
         row = conn.execute(text(f'''SELECT u.id,u.full_name,u.phone,u.date_of_birth,u.country,
-                u.avatar_url,u.user_type,u.default_workspace_id,e.email,
+                u.avatar_url,u.user_type,u.account_type,u.default_workspace_id,e.email,
                 (e.verified_at IS NOT NULL) AS email_verified
             FROM {s}.auth_sessions a JOIN {s}.app_users u ON u.id=a.app_user_id
             LEFT JOIN {s}.user_emails e ON e.app_user_id=u.id AND e.is_primary=true
@@ -311,7 +325,7 @@ def _new_challenge(conn, user_id, email, purpose):
     return {"challenge_id": str(challenge_id), "code": code}
 
 
-def start_password_registration(email, full_name, phone, password):
+def start_password_registration(email, full_name, phone, password, account_type, invitation_token=None):
     if not setting_enabled("signup_enabled", True):
         raise AccountUnavailable("Signup is disabled right now")
     email = normalize_email(email)
@@ -327,6 +341,8 @@ def start_password_registration(email, full_name, phone, password):
     s = schema_name()
     try:
         with auth_engine().begin() as conn:
+            approved_type = admission_type(conn, email, invitation_token)
+            account_type = resolve_account_type(account_type, approved_type)
             existing = conn.execute(
                 text(
                     f"""SELECT u.id,u.status,e.verified_at
@@ -371,6 +387,8 @@ def start_password_registration(email, full_name, phone, password):
                 ),
                 {"id": user_id, "hash": password_hash},
             )
+            conn.execute(text(f'UPDATE {s}.app_users SET account_type=COALESCE(account_type,:kind) WHERE id=:id'),
+                         {'kind': account_type, 'id': user_id})
             challenge = (
                 _new_challenge(conn, user_id, email, "REGISTRATION_EMAIL_OTP")
                 if verification_required
@@ -423,7 +441,7 @@ def _verified_challenge(conn, challenge_id, code, purpose, user_id=None):
     s = schema_name()
     row = conn.execute(
         text(
-            f"""SELECT c.*,u.status,u.full_name FROM {s}.auth_challenges c
+            f"""SELECT c.*,u.status,u.full_name,u.account_type FROM {s}.auth_challenges c
             JOIN {s}.app_users u ON u.id=c.app_user_id
             WHERE c.id=:id AND c.purpose=:purpose
               AND (CAST(:user_id AS uuid) IS NULL OR c.app_user_id=CAST(:user_id AS uuid))
@@ -449,7 +467,7 @@ def _verified_challenge(conn, challenge_id, code, purpose, user_id=None):
     return row
 
 
-def verify_email(challenge_id, code, user_id=None):
+def verify_email(challenge_id, code, user_id=None, invitation_token=None):
     s = schema_name()
     purpose = "EMAIL_VERIFY" if user_id else "REGISTRATION_EMAIL_OTP"
     invalid_error = None
@@ -459,6 +477,11 @@ def verify_email(challenge_id, code, user_id=None):
         except InvalidVerificationCode as error:
             invalid_error = error
         else:
+            if not user_id:
+                if not setting_enabled('signup_enabled', True):
+                    raise AccountUnavailable('Signup is disabled right now')
+                approved_type = admission_type(conn, str(row['target_email']).lower(), invitation_token)
+                resolve_account_type(row['account_type'], approved_type)
             conn.execute(
                 text(f"UPDATE {s}.auth_challenges SET consumed_at=CURRENT_TIMESTAMP WHERE id=:id"),
                 {"id": row["id"]},
@@ -487,7 +510,7 @@ def verify_email(challenge_id, code, user_id=None):
     return result
 
 
-def complete_google_profile(user_id, full_name, phone=None):
+def complete_google_profile(user_id, full_name, phone=None, account_type=None):
     name = (full_name or "").strip()
     phone = (phone or "").strip() or None
     if not name:
@@ -496,9 +519,18 @@ def complete_google_profile(user_id, full_name, phone=None):
         raise AccountUnavailable("Enter a valid phone number")
     s = schema_name()
     with auth_engine().begin() as conn:
+        current = conn.execute(
+            text(f'SELECT account_type FROM {s}.app_users WHERE id=:id FOR UPDATE'),
+            {'id': UUID(str(user_id))},
+        ).mappings().first()
+        if not current:
+            raise AccountUnavailable('Profile is unavailable')
+        account_type = resolve_account_type(account_type, current['account_type'])
         conn.execute(
-            text(f"""UPDATE {s}.app_users SET full_name=:name,phone=:phone WHERE id=:id"""),
-            {"id": UUID(str(user_id)), "name": name[:150], "phone": phone},
+            text(f"""UPDATE {s}.app_users SET full_name=:name,phone=:phone,
+                account_type=:account_type WHERE id=:id"""),
+            {"id": UUID(str(user_id)), "name": name[:150], "phone": phone,
+             'account_type': account_type},
         )
     return session_profile(user_id)
 
@@ -551,7 +583,7 @@ def session_profile(user_id):
         return dict(row, id=str(row["id"]))
 
 
-def start_registration(email, full_name):
+def start_registration(email, full_name, account_type, invitation_token=None):
     if not setting_enabled("signup_enabled", True):
         raise AccountUnavailable("Signup is disabled right now")
     email = normalize_email(email)
@@ -560,6 +592,8 @@ def start_registration(email, full_name):
     challenge_id = uuid4()
     code = generate_otp()
     with auth_engine().begin() as conn:
+        approved_type = admission_type(conn, email, invitation_token)
+        account_type = resolve_account_type(account_type, approved_type)
         existing = conn.execute(
             text(f"""SELECT u.id,u.status,e.verified_at FROM {s}.user_emails e
             JOIN {s}.app_users u ON u.id=e.app_user_id
@@ -584,6 +618,8 @@ def start_registration(email, full_name):
                 text(f"INSERT INTO {s}.user_emails(app_user_id,email,is_primary) VALUES (:id,:email,true)"),
                 {"id": user_id, "email": email},
             )
+        conn.execute(text(f'UPDATE {s}.app_users SET account_type=COALESCE(account_type,:kind) WHERE id=:id'),
+                     {'kind': account_type, 'id': user_id})
         conn.execute(
             text(f"""UPDATE {s}.auth_challenges SET consumed_at=CURRENT_TIMESTAMP
             WHERE app_user_id=:u AND target_email=:email AND purpose='REGISTRATION_EMAIL_OTP' AND consumed_at IS NULL"""),
@@ -599,5 +635,5 @@ def start_registration(email, full_name):
     return {"id": str(user_id), "challenge_id": str(challenge_id), "email": email, "full_name": name, "code": code}
 
 
-def verify_registration(challenge_id, code):
-    return verify_email(challenge_id, code)
+def verify_registration(challenge_id, code, invitation_token=None):
+    return verify_email(challenge_id, code, invitation_token=invitation_token)

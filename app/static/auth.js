@@ -1,5 +1,38 @@
 (() => {
+  const invitationForm = document.getElementById('invitation-request-form');
+  const invitationPanel = invitationForm?.closest('section');
+  invitationForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = invitationForm.querySelector('button[type=submit]');
+    const status = document.getElementById('invitation-request-status');
+    button.disabled = true;
+    status.textContent = 'Sending your request…';
+    try {
+      const response = await fetch('/auth/invitation-requests', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(Object.fromEntries(new FormData(invitationForm)))});
+      const payload = await response.json();
+      if (!response.ok) throw new Error(typeof payload.detail === 'string' ? payload.detail : 'Check your request details and try again.');
+      status.textContent = payload.message;
+      invitationForm.reset();
+    } catch (error) { status.textContent = error.message; }
+    finally { button.disabled = false; }
+  });
   const signupPanel = document.getElementById('signup-panel');
+  const showInvitation = () => {
+    if (!invitationForm) { window.location.href = '/login#invitation'; return; }
+    if (signupPanel) signupPanel.hidden = true;
+    invitationPanel.hidden = false;
+    invitationPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    invitationForm.elements.full_name.focus({ preventScroll: true });
+  };
+  document.querySelectorAll('[data-request-invitation]').forEach(button => button.addEventListener('click', event => {
+    event.preventDefault();
+    showInvitation();
+  }));
+  if (window.location.hash === '#invitation') showInvitation();
+  document.querySelector('[data-close-invitation]')?.addEventListener('click', () => {
+    invitationPanel.hidden = true;
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  });
   const signupStatus = document.getElementById('signup-status');
   const startForm = document.getElementById('signup-start-form');
   const verifyForm = document.getElementById('signup-verify-form');
@@ -12,6 +45,7 @@
     if (!loginForm) return;
     event.preventDefault();
     signupPanel.hidden = true;
+    if (invitationPanel) invitationPanel.hidden = true;
     loginCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
     loginForm.elements.email.focus({ preventScroll: true });
   }));
@@ -45,6 +79,7 @@
   });
   const showSignup = () => {
     if (!signupPanel) { window.location.href = '/login#signup'; return; }
+    if (invitationPanel) invitationPanel.hidden = true;
     signupPanel.hidden = false;
     signupPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
     signupPanel.querySelector('input:not([type=hidden])')?.focus();

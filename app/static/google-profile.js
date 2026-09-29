@@ -19,6 +19,7 @@
         body: JSON.stringify({
           full_name: data.full_name,
           phone: data.phone || null,
+          account_type: data.account_type,
           accepted_terms: data.accepted_terms === 'true',
         }),
       });

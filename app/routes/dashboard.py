@@ -8,7 +8,7 @@ from ..views import templates
 from ..auth.dependencies import require_user, require_dashboard_user, current_user
 from ..workspaces.db import transaction
 from ..workspaces.access import access, MANAGERS
-from ..workspaces.services.organizations import memberships
+from ..workspaces.services.organizations import memberships, saved_business_summary
 from ..workspaces.services.overview import dashboard_data
 from ..services.product_settings import setting_enabled
 
@@ -132,6 +132,8 @@ def onboarding(request: Request, user=Depends(require_user), db=Depends(transact
             request,
             user,
             teacher_only=False,
+            business_profile=saved_business_summary(db, user['id']),
+            account_type=user.get('account_type') or next(('INDIVIDUAL' if item['workspace_type']=='INDIVIDUAL' else 'ORGANIZATION' for item in choices if item.get('owner_user_id') and str(item['owner_user_id']) == str(user['id'])), None),
             display_role=role_label(db, user, choices),
         ),
     )
@@ -140,6 +142,11 @@ def onboarding(request: Request, user=Depends(require_user), db=Depends(transact
 @router.get("/workspaces/{workspace_id}", response_class=HTMLResponse)
 def workspace_page(request: Request, a=Depends(access)):
     teacher_only = not bool(a.roles & MANAGERS)
+    account_type = a.user.get("account_type") or (
+        "INDIVIDUAL"
+        if a.workspace.get("workspace_type") == "INDIVIDUAL"
+        else "ORGANIZATION"
+    )
     return templates.TemplateResponse(
         "workspace.html",
         context(
@@ -147,6 +154,7 @@ def workspace_page(request: Request, a=Depends(access)):
             a.user,
             workspace=a.workspace,
             workspaces=memberships(a.db, a.user),
+            organization_account=account_type == "ORGANIZATION",
             teacher_only=teacher_only,
             owner_view="OWNER" in a.roles,
             display_role=next(

@@ -9,6 +9,7 @@ from ..auth.database import auth_engine, schema_name
 logger = logging.getLogger(__name__)
 
 DEFAULTS = {
+    "invite_request_enabled": False,
     "google_new_accounts_enabled": True,
     "signup_enabled": True,
     "email_verification_enabled": True,
@@ -35,6 +36,8 @@ def setting_enabled(key, default=None):
             ).first()
             return _bool(row[0] if row else None, default)
     except SQLAlchemyError:
+        if key == "invite_request_enabled":
+            raise
         # During rollout, old databases must keep existing login behavior until the
         # migration is applied. The executive page will surface the missing table.
         logger.debug("Product setting %s unavailable; using default", key)
@@ -62,6 +65,9 @@ def all_settings(conn=None):
 
 def set_settings(updates, user_id):
     allowed = {key: bool(value) for key, value in updates.items() if key in DEFAULTS}
+    # Switching back to open registration must also reopen the password signup form.
+    if allowed.get('invite_request_enabled') is False:
+        allowed['signup_enabled'] = True
     if not allowed:
         return all_settings()
     with auth_engine().begin() as conn:

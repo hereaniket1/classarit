@@ -18,7 +18,11 @@
     <a class="public-brand" href="/" aria-label="Classarit home"><span class="brand-mark">C</span><span>Classarit</span></a>
     <nav class="public-nav" aria-label="Main navigation">
       <a class="login-link" href="/login" data-login>Log in</a>
+      {% if invite_request_enabled %}
+      <a class="btn btn-primary" href="/login#invitation" data-request-invitation>Request invitation</a>
+      {% else %}
       <a class="btn btn-primary" href="/login#signup" data-signup>Sign up</a>
+      {% endif %}
     </nav>
   </header>
   {% block content %}{% endblock %}

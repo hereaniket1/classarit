@@ -22,6 +22,12 @@ teams, students, classes, sports events, attendance and makeup lessons.
 
 ## Run locally
 
+For the restored invitation requests, executive controls, account types and one-time
+organization identity flow, see [implementation and review notes](IMPLEMENTATION_REVIEW.md).
+Fresh database installations must also apply `016_admissions_compatibility.sql` after
+013. It reconstructs the schema contract without replacing historical migrations
+014/015 or their recorded checksums.
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate

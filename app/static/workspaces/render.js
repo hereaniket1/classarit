@@ -184,8 +184,8 @@ export function render(s, tab) {
     body += `<section class="workspace-card settings-card workspace-settings-card"><div><h3>${esc(s.workspace.name)}</h3><p class="subtext">${esc(s.workspace.workspace_type === "INDIVIDUAL" ? "Individual practice" : "Institute")} · ${esc(s.workspace.timezone)} · ${esc(s.workspace.currency)}</p></div><div class="row-actions">${owner ? `${labeledButton("Edit workspace", "edit-workspace")}${danger("Delete workspace", "delete-workspace")}` : '<span class="subtext">Only the Owner can edit or delete this workspace.</span>'}</div></section>`;
     if (s.business_profile) {
       const b = s.business_profile;
-      const aadhaar = b.owner_aadhaar_number
-        ? `Government ID •••• ${esc(String(b.owner_aadhaar_number).slice(-4))}`
+      const aadhaar = b.owner_aadhaar_last4
+        ? `Government ID •••• ${esc(b.owner_aadhaar_last4)}`
         : "Government ID not added";
       body += `<section class="workspace-card settings-card"><h3>Business profile</h3><p class="subtext">${esc(b.legal_name)} · Business ID ${esc(b.gstin || "not added")} · ${aadhaar}</p><p class="subtext">${esc([b.address_line1, b.address_line2, b.city, b.state, b.postal_code, b.country].filter(Boolean).join(", "))}</p></section>`;
     }

@@ -352,7 +352,9 @@ def _load_business_profile(a, result):
     if not a.workspace.get("business_profile_id"):
         return
     result["business_profile"] = a.db.first(
-        "SELECT * FROM {s}.business_profiles WHERE id=:id",
+        """SELECT legal_name,gstin,right(owner_aadhaar_number,4) AS owner_aadhaar_last4,
+            address_line1,address_line2,city,state,postal_code,country
+            FROM {s}.business_profiles WHERE id=:id""",
         id=a.workspace["business_profile_id"],
     )
 

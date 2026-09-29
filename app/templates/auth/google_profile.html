@@ -15,6 +15,11 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label>Full name<input class="form-control" name="full_name" autocomplete="name" required maxlength="150" value="{{ user.full_name or '' }}"></label>
       <label>Phone number <span class="text-muted">optional</span><input class="form-control" name="phone" type="tel" autocomplete="tel" maxlength="30" value="{{ user.phone or '' }}" placeholder="Add later if you prefer"></label>
+      <label>Account type<select class="form-select" name="account_type" required>
+        <option value="" {% if not user.account_type %}selected{% endif %} disabled>Choose account type</option>
+        <option value="INDIVIDUAL" {% if user.account_type == 'INDIVIDUAL' %}selected{% endif %}>Individual teacher · one workspace</option>
+        <option value="ORGANIZATION" {% if user.account_type == 'ORGANIZATION' %}selected{% endif %}>Organization · up to three workspaces</option>
+      </select></label>
       <label class="terms-check"><input type="checkbox" name="accepted_terms" value="true" required> I accept the <button type="button" class="terms-link" data-terms-open>Classarit terms and conditions</button></label>
       <button type="submit" class="btn btn-primary">Continue</button>
     </form>
@@ -22,14 +27,16 @@
     <div class="terms-popup" id="terms-popup" hidden>
       <div class="terms-popup-panel" role="dialog" aria-modal="true" aria-labelledby="terms-title">
         <div class="terms-popup-head">
-          <h3 id="terms-title">Classarit terms and conditions</h3>
+          <h3 id="terms-title">{{ terms.title if terms else 'Classarit terms and conditions' }}</h3>
           <button type="button" class="terms-close" data-terms-close aria-label="Close terms">×</button>
         </div>
         <div class="terms-popup-body">
+          {% if terms %}<div style="white-space:pre-wrap">{{ terms.body }}</div>{% else %}
           <p>Classarit is provided as an early access teaching management tool. Information in the app is for organizing classes, schedules, students and workspace operations, and is not legal, tax, financial, medical or professional advice.</p>
           <p>You are responsible for the accuracy of the information you enter, for getting any consent needed before adding another person’s information, and for using the service lawfully. Do not upload unlawful, harmful or sensitive information that you do not have permission to store.</p>
           <p>The service may change, pause or lose availability during testing. Data may be corrected, removed or reset while the product is under development. Use your own records as the source of truth for payments, attendance and compliance until formal launch terms are published.</p>
           <p>Classarit is provided without warranties during this demo period. To the extent allowed by law, liability is limited to stopping use of the service. Final commercial terms, privacy policy and compliance wording should be reviewed by a qualified attorney before public launch.</p>
+          {% endif %}
         </div>
       </div>
     </div>

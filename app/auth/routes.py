@@ -1,6 +1,7 @@
 import logging
 import secrets
 from datetime import date
+from typing import Literal
 
 from authlib.integrations.starlette_client import OAuth
 from pydantic import BaseModel, Field
@@ -10,6 +11,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ..views import templates
 from ..services import notifications
+from ..services.content import terms_context
 from ..services.product_settings import setting_enabled
 from .settings import get_settings, google_callback_url
 from .dependencies import current_user, require_dashboard_user
@@ -24,6 +26,7 @@ oauth = OAuth()
 class RegistrationStart(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
     email: str = Field(min_length=3, max_length=254)
+    account_type: Literal['INDIVIDUAL', 'ORGANIZATION']
     accepted_terms: bool = False
 
 
@@ -36,6 +39,7 @@ class PasswordRegistration(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
     phone: str = Field(min_length=5, max_length=30)
     email: str = Field(min_length=3, max_length=254)
+    account_type: Literal['INDIVIDUAL', 'ORGANIZATION']
     password: str = Field(min_length=10, max_length=128)
     accepted_terms: bool = False
 
@@ -47,6 +51,7 @@ class TermsAcceptance(BaseModel):
 class GoogleProfileCompletion(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
     phone: str | None = Field(default=None, max_length=30)
+    account_type: Literal['INDIVIDUAL', 'ORGANIZATION']
     accepted_terms: bool = False
 
 
@@ -97,6 +102,7 @@ def record_terms(request, user, source):
             source,
             request_ip(request),
             request.headers.get("user-agent", ""),
+            version=request.session.get('terms_version'),
         )
     except Exception:
         # Terms audit is important, but a stale local schema or duplicate historical
@@ -113,8 +119,10 @@ def login_page(request: Request):
         'request':request,
         'google_ready':settings.ready,
         'signup_enabled':setting_enabled('signup_enabled', True),
+        'invite_request_enabled':setting_enabled('invite_request_enabled', False),
         'email_verification_enabled':setting_enabled('email_verification_enabled', True),
         'invitation_pending':bool(request.session.get('pending_invitation')),
+        'terms': terms_context(request),
     })
 
 
@@ -139,7 +147,7 @@ async def google_callback(request: Request):
         if not token.get('id_token') or not claims:
             raise repository.AccountUnavailable('Missing verified ID token')
         started_from_login = bool(request.session.get('google_login_started'))
-        user = await run_in_threadpool(repository.google_account, claims)
+        user = await run_in_threadpool(repository.google_account, claims, request.session.get('pending_invitation'))
         await run_in_threadpool(record_terms, request, user, 'GOOGLE_LOGIN')
         await run_in_threadpool(sign_in, request, user)
         if started_from_login and user.get('is_new_user'):
@@ -147,8 +155,8 @@ async def google_callback(request: Request):
         return result(request, success=True)
     except repository.LinkingRequired:
         return result(request, message='Verify this account by email before connecting Google.')
-    except repository.AccountUnavailable:
-        return result(request, message='This account cannot sign in. Please contact support.')
+    except repository.AccountUnavailable as error:
+        return result(request, message=str(error))
     except Exception:
         # Do not log OAuth codes, tokens, DB connection details or provider claims.
         logger.warning('Google callback could not be completed', exc_info=True)
@@ -160,7 +168,7 @@ def register_start(payload: RegistrationStart, request: Request, background_task
     if not payload.accepted_terms:
         return JSONResponse({'detail':'Accept the terms and conditions to continue.'}, status_code=422)
     try:
-        challenge = repository.start_registration(payload.email, payload.full_name)
+        challenge = repository.start_registration(payload.email, payload.full_name, payload.account_type, request.session.get('pending_invitation'))
         record_terms(request, challenge, 'EMAIL_OTP_SIGNUP')
         notifications.send_registration_otp(
             background_tasks,
@@ -170,7 +178,7 @@ def register_start(payload: RegistrationStart, request: Request, background_task
         )
         return {'ok': True, 'challenge_id': challenge['challenge_id'], 'email': challenge['email']}
     except repository.LinkingRequired:
-        return JSONResponse({'detail':'This email is already registered. Please log in with an existing method.'}, status_code=409)
+        return JSONResponse({'detail':repository.ACCOUNT_EXISTS_MESSAGE}, status_code=409)
     except repository.AccountUnavailable as error:
         return JSONResponse({'detail':str(error)}, status_code=403)
 
@@ -178,7 +186,7 @@ def register_start(payload: RegistrationStart, request: Request, background_task
 @router.post('/auth/register/verify')
 def register_verify(payload: RegistrationVerify, request: Request):
     try:
-        user = repository.verify_registration(payload.challenge_id, payload.code)
+        user = repository.verify_registration(payload.challenge_id, payload.code, request.session.get('pending_invitation'))
         sign_in(request, user)
         return {'ok': True}
     except repository.AccountUnavailable as error:
@@ -191,7 +199,8 @@ def password_register(payload: PasswordRegistration, request: Request, backgroun
         return JSONResponse({'detail':'Accept the terms and conditions to continue.'}, status_code=422)
     try:
         user = repository.start_password_registration(
-            payload.email, payload.full_name, payload.phone, payload.password
+            payload.email, payload.full_name, payload.phone, payload.password,
+            payload.account_type, request.session.get('pending_invitation')
         )
         record_terms(request, user, 'PASSWORD_SIGNUP')
         if user['verification_required']:
@@ -207,10 +216,7 @@ def password_register(payload: PasswordRegistration, request: Request, backgroun
         sign_in(request, user)
         return {'ok': True, 'verification_required': False}
     except repository.LinkingRequired:
-        return JSONResponse(
-            {'detail':'This email is already registered. Log in or use Google.'},
-            status_code=409,
-        )
+        return JSONResponse({'detail':repository.ACCOUNT_EXISTS_MESSAGE}, status_code=409)
     except repository.AccountUnavailable as error:
         return JSONResponse({'detail':str(error)}, status_code=400)
 
@@ -231,6 +237,8 @@ def google_profile_page(request: Request, user=Depends(require_dashboard_user)):
         'request': request,
         'user': user,
         'csrf_token': request.session.get('csrf', ''),
+        'terms': terms_context(request),
+        'invite_request_enabled': setting_enabled('invite_request_enabled', False),
     })
 
 
@@ -241,7 +249,9 @@ def google_profile_complete(payload: GoogleProfileCompletion, request: Request, 
     if not payload.accepted_terms:
         return JSONResponse({'detail':'Accept the terms and conditions to continue.'}, status_code=422)
     try:
-        updated = repository.complete_google_profile(user['id'], payload.full_name, payload.phone)
+        updated = repository.complete_google_profile(
+            user['id'], payload.full_name, payload.phone, payload.account_type
+        )
         record_terms(request, updated, 'GOOGLE_PROFILE')
         request.session.pop('google_profile_required', None)
         return {'ok': True}
@@ -252,7 +262,7 @@ def google_profile_complete(payload: GoogleProfileCompletion, request: Request, 
 @router.post('/auth/password/register/verify')
 def password_register_verify(payload: RegistrationVerify, request: Request):
     try:
-        user = repository.verify_registration(payload.challenge_id, payload.code)
+        user = repository.verify_registration(payload.challenge_id, payload.code, request.session.get('pending_invitation'))
         sign_in(request, user)
         return {'ok': True}
     except repository.AccountUnavailable as error:

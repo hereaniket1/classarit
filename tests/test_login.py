@@ -39,7 +39,7 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         # Match hosted installations where citext already lives in public.
         subprocess.run(cmd+['-c','CREATE EXTENSION citext WITH SCHEMA public'],check=True,stdout=subprocess.DEVNULL)
         subprocess.run(cmd+['-f',str(ROOT/'setup/auth_schema.sql')],check=True,stdout=subprocess.DEVNULL)
-        for migration in ('001_workspaces_and_teaching.sql','002_account_types_and_single_owner.sql','003_owner_staff_separation.sql','004_recurring_session_series.sql','005_workspace_type_role_policy.sql','006_direct_scheduled_participants.sql','007_default_workspace.sql','008_notifications_otp_executive.sql','009_exclusive_staff_roles.sql','010_password_login_and_profiles.sql','011_business_profiles_and_individual_limit.sql','012_terms_acceptance_audit.sql','013_google_profile_terms_events.sql'):
+        for migration in ('001_workspaces_and_teaching.sql','002_account_types_and_single_owner.sql','003_owner_staff_separation.sql','004_recurring_session_series.sql','005_workspace_type_role_policy.sql','006_direct_scheduled_participants.sql','007_default_workspace.sql','008_notifications_otp_executive.sql','009_exclusive_staff_roles.sql','010_password_login_and_profiles.sql','011_business_profiles_and_individual_limit.sql','012_terms_acceptance_audit.sql','013_google_profile_terms_events.sql','016_admissions_compatibility.sql'):
             for _ in range(2):
                 subprocess.run([sys.executable,str(ROOT/'setup/apply_migration.py'),migration],check=True,stdout=subprocess.DEVNULL)
         from app.main import app
@@ -59,6 +59,8 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         with auth_engine().begin() as conn:
             conn.execute(text('TRUNCATE classarit.app_users CASCADE'))
             conn.execute(text("UPDATE classarit.app_settings SET value='true', updated_by=NULL"))
+            conn.execute(text("UPDATE classarit.app_settings SET value='false' WHERE key='invite_request_enabled'"))
+            conn.execute(text('TRUNCATE classarit.interest,classarit.app_content'))
             conn.execute(text('TRUNCATE classarit.api_request_metrics'))
         self.client=self.client_type(self.app,base_url='http://127.0.0.1:8000')
         self.client.__enter__();self.addCleanup(self.client.__exit__,None,None,None)
@@ -77,7 +79,7 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         sent = []
         with patch('app.services.emailer.send_email', side_effect=lambda *args, **kwargs: sent.append((args, kwargs)) or {'id':'test'}), \
              patch('app.auth.repository.generate_otp', return_value='123456'):
-            started = self.client.post('/auth/register/start', json={'full_name':'New Owner','email':'new-owner@example.com','accepted_terms':True})
+            started = self.client.post('/auth/register/start', json={'full_name':'New Owner','email':'new-owner@example.com','account_type':'INDIVIDUAL','accepted_terms':True})
             self.assertEqual(started.status_code, 200, started.text)
             self.assertEqual(len(sent), 1)
             verify = self.client.post('/auth/register/verify', json={'challenge_id':started.json()['challenge_id'],'code':'123456'})
@@ -102,7 +104,7 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         changed = exec_client.patch('/api/executive/settings', headers={'X-CSRF-Token':exec_csrf}, json={'google_new_accounts_enabled':False,'signup_enabled':False,'notification_emails_enabled':False})
         self.assertEqual(changed.status_code, 200, changed.text)
         self.assertFalse(changed.json()['settings']['google_new_accounts_enabled'])
-        self.assertEqual(self.client.post('/auth/register/start', json={'full_name':'Blocked','email':'blocked@example.com','accepted_terms':True}).status_code, 403)
+        self.assertEqual(self.client.post('/auth/register/start', json={'full_name':'Blocked','email':'blocked@example.com','account_type':'INDIVIDUAL','accepted_terms':True}).status_code, 403)
         self.login(existing, 'existing-google', 'existing@example.com')
         newcomer = self.client_type(self.app, base_url='http://127.0.0.1:8000')
         newcomer.__enter__(); self.addCleanup(newcomer.__exit__, None, None, None)
@@ -205,9 +207,9 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
                 self.assertEqual(me.get('next_url'), '/auth/google/profile')
                 profile_page = self.client.get('/auth/google/profile')
                 self.assertEqual(profile_page.status_code, 200)
-                blocked = self.client.post('/auth/google/profile', json={'full_name':'Signed user','phone':'','accepted_terms':False})
+                blocked = self.client.post('/auth/google/profile', json={'full_name':'Signed user','phone':'','account_type':'INDIVIDUAL','accepted_terms':False})
                 self.assertEqual(blocked.status_code, 422)
-                completed = self.client.post('/auth/google/profile', json={'full_name':'Signed user','phone':'','accepted_terms':True})
+                completed = self.client.post('/auth/google/profile', json={'full_name':'Signed user','phone':'','account_type':'INDIVIDUAL','accepted_terms':True})
                 self.assertEqual(completed.status_code, 200, completed.text)
                 self.assertNotIn('next_url', self.client.get('/auth/me').json())
                 # Replayed state must fail, even with a valid token.
@@ -247,6 +249,7 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
             started=self.client.post('/auth/password/register',json={
                 'full_name':'Password User','phone':'+91 9876543210',
                 'email':'password@example.com','password':'correct horse battery staple',
+                'account_type':'INDIVIDUAL',
                 'accepted_terms':True,
             })
             self.assertEqual(started.status_code,200,started.text)
@@ -256,6 +259,7 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
             retried=self.client.post('/auth/password/register',json={
                 'full_name':'Password User','phone':'+91 9876543210',
                 'email':'password@example.com','password':'correct horse battery staple',
+                'account_type':'INDIVIDUAL',
                 'accepted_terms':True,
             })
             self.assertEqual(retried.status_code,200,retried.text)
@@ -299,7 +303,7 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         unverified.__enter__();self.addCleanup(unverified.__exit__,None,None,None)
         created=unverified.post('/auth/password/register',json={
             'full_name':'Quick Signup','phone':'5551234567','email':'quick@example.com',
-            'password':'a sufficiently long password','accepted_terms':True,
+            'password':'a sufficiently long password','account_type':'INDIVIDUAL','accepted_terms':True,
         })
         self.assertEqual(created.status_code,200,created.text)
         self.assertFalse(created.json()['verification_required'])

@@ -28,6 +28,16 @@ REQUIRED_BUSINESS_FIELDS = {
 }
 
 
+def business_profile_complete(profile):
+    return bool(profile) and all(str(profile.get(key) or '').strip() for key in (
+        'legal_name', 'gstin', 'owner_aadhaar_number', 'address_line1', 'city', 'state', 'postal_code', 'country'))
+
+
+def saved_business_summary(db, user_id):
+    row = db.first("SELECT * FROM {s}.business_profiles WHERE owner_user_id=:u AND status='ACTIVE'", u=user_id)
+    return {'legal_name': row['legal_name']} if business_profile_complete(row) else None
+
+
 def staff_roles_for(workspace):
     return (
         INDIVIDUAL_STAFF_ROLES
@@ -116,6 +126,12 @@ def has_active_staff_membership(db, user_id):
 
 
 def _business_profile(db, user_id, payload):
+    existing = db.first(
+        "SELECT * FROM {s}.business_profiles WHERE owner_user_id=:u AND status='ACTIVE' FOR UPDATE", u=user_id,
+    )
+    if business_profile_complete(existing):
+        # Workspace creation reuses identity; it must never overwrite a shared profile.
+        return existing
     data = payload.model_dump()
     missing = [
         field
@@ -127,31 +143,14 @@ def _business_profile(db, user_id, payload):
             422,
             "Company setup needs a business ID, owner government ID and address.",
         )
-    existing = db.first(
-        "SELECT * FROM {s}.business_profiles WHERE owner_user_id=:u FOR UPDATE",
-        u=user_id,
-    )
     fields = {field: data.get(field) for field in BUSINESS_FIELDS}
     if existing:
-        db.execute(
-            """UPDATE {s}.business_profiles SET
-            legal_name=:business_legal_name,
-            gstin=:business_gstin,
-            owner_aadhaar_number=:owner_aadhaar_number,
-            address_line1=:business_address_line1,
-            address_line2=:business_address_line2,
-            city=:business_city,
-            state=:business_state,
-            postal_code=:business_postal_code,
-            country=:business_country,
-            updated_at=CURRENT_TIMESTAMP
-            WHERE id=:id""",
-            id=existing["id"],
-            **fields,
-        )
-        return db.first(
-            "SELECT * FROM {s}.business_profiles WHERE id=:id", id=existing["id"]
-        )
+        db.execute('''UPDATE {s}.business_profiles SET legal_name=:business_legal_name,
+            gstin=:business_gstin,owner_aadhaar_number=:owner_aadhaar_number,
+            address_line1=:business_address_line1,address_line2=:business_address_line2,
+            city=:business_city,state=:business_state,postal_code=:business_postal_code,
+            country=:business_country WHERE id=:id''', id=existing['id'], **fields)
+        return existing
     return db.insert(
         "business_profiles",
         owner_user_id=user_id,
@@ -169,7 +168,7 @@ def _business_profile(db, user_id, payload):
 
 def create_workspace(db, user, payload):
     account = db.first(
-        "SELECT user_type FROM {s}.app_users WHERE id=:u FOR UPDATE", u=user["id"]
+        "SELECT user_type,account_type FROM {s}.app_users WHERE id=:u FOR UPDATE", u=user["id"]
     )
     if account["user_type"] == "APPOWNER":
         raise HTTPException(403, "APPOWNER cannot own or join a workspace.")
@@ -179,6 +178,12 @@ def create_workspace(db, user, payload):
             "Ask the current workspace owner or admin to deactivate this staff profile before using the same email as an owner.",
         )
     data = payload.model_dump()
+    requested_type = 'INDIVIDUAL' if payload.workspace_type == 'INDIVIDUAL' else 'ORGANIZATION'
+    if account.get('account_type') and account['account_type'] != requested_type:
+        raise HTTPException(409, 'Choose a workspace that matches your account type.')
+    existing_types = db.all('SELECT DISTINCT workspace_type FROM {s}.workspaces WHERE owner_user_id=:u AND status=\'ACTIVE\'', u=user['id'])
+    if any(row['workspace_type'] != payload.workspace_type for row in existing_types):
+        raise HTTPException(409, 'Your existing workspaces use a different account type. Contact support before changing it.')
     business_profile_id = None
     if payload.workspace_type == "INDIVIDUAL":
         if db.first(
@@ -189,10 +194,14 @@ def create_workspace(db, user, payload):
         ):
             raise HTTPException(
                 409,
-                "Independent teachers can have one active individual workspace. Create an institute/company workspace for multiple branches.",
+                "Independent teachers can have one active individual workspace.",
             )
     else:
+        count = db.first("SELECT count(*) AS total FROM {s}.workspaces WHERE owner_user_id=:u AND workspace_type='INSTITUTE' AND status='ACTIVE'", u=user['id'])
+        if count['total'] >= 3:
+            raise HTTPException(409, 'Organizations can have up to three active workspaces during early access.')
         business_profile_id = _business_profile(db, user["id"], payload)["id"]
+    db.execute('UPDATE {s}.app_users SET account_type=COALESCE(account_type,:kind) WHERE id=:u', kind=requested_type, u=user['id'])
     db.execute("UPDATE {s}.app_users SET user_type='OWNER' WHERE id=:u", u=user["id"])
     workspace = db.insert(
         "workspaces",

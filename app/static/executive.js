@@ -15,6 +15,10 @@ const dashboardRegions = [
 ];
 
 const labels = {
+  invite_request_enabled: [
+    "Invitation-only signup",
+    "New accounts need an approved request or a valid team invitation. Turning this off automatically enables open signup and shows Sign up at the top. Existing users can still log in.",
+  ],
   google_new_accounts_enabled: [
     "Google new-account login",
     "When off, existing Google users can log in, but new emails cannot be created through Google.",

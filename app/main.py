@@ -15,6 +15,7 @@ from .auth.dependencies import require_user
 from .routes.public import router as public_router
 from .routes.dashboard import router as dashboard_router
 from .routes.executive import router as executive_router
+from .routes.admissions import router as admissions_router
 from .workspaces.routes import router as workspace_router
 from .routes.teaching import router as teaching_router
 from .config import PROJECT_DIR, UPLOAD_DIR
@@ -40,6 +41,7 @@ app.include_router(public_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
 app.include_router(executive_router)
+app.include_router(admissions_router)
 app.include_router(teaching_router)
 app.include_router(workspace_router)
 
