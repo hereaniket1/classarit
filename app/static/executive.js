@@ -6,7 +6,6 @@ const settingsCard = document.querySelector("#executive-settings-card");
 const latencyCard = document.querySelector("#executive-latency-card");
 const routesCard = document.querySelector("#executive-routes-card");
 const flushForm = document.querySelector("#flush-data-form");
-const deleteTermsForm = document.querySelector("#delete-terms-form");
 const dashboardRegions = [
   [registrationMetrics, "registration metrics", 2],
   [settingsCard, "product controls", 3],
@@ -21,7 +20,7 @@ const labels = {
   ],
   google_new_accounts_enabled: [
     "Google new-account login",
-    "When off, existing Google users can log in, but new emails cannot be created through Google.",
+    "Allows new Google accounts only when invitation-only signup is off. Existing users can always log in with Google.",
   ],
   signup_enabled: [
     "New account signup",
@@ -160,7 +159,7 @@ flushForm?.addEventListener("submit", async (event) => {
   button.disabled = true;
   loading?.busy(flushForm, "Resetting data");
   try {
-    await api("/api/executive/flush-data", {
+    const result = await api("/api/executive/flush-data", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -170,48 +169,20 @@ flushForm?.addEventListener("submit", async (event) => {
         confirmation: flushForm.elements.namedItem("confirmation").value,
       }),
     });
-    show("Data deleted. Please sign in again.");
-    window.setTimeout(() => {
-      loading?.navigate("/login", "login") || (location.href = "/login");
-    }, 800);
+    flushForm.reset();
+    await load();
+    show(result.failed_upload_deletions ? 'Database reset complete. Some uploaded files could not be removed; retry the reset.' : 'All application data and audit records deleted. Your executive login is preserved.', Boolean(result.failed_upload_deletions));
+    if (!result.failed_upload_deletions) {
+      window.setTimeout(() => {
+        loading?.navigate('/executive', 'executive dashboard') || (location.href = '/executive');
+      }, 800);
+    }
   } catch (error) {
     show(error.message, true);
     button.disabled =
       flushForm.elements.namedItem("confirmation")?.value !== "DELETE ALL DATA";
   } finally {
     loading?.end(flushForm);
-  }
-});
-
-deleteTermsForm?.addEventListener("input", () => {
-  const button = deleteTermsForm.querySelector("button");
-  button.disabled =
-    deleteTermsForm.elements.namedItem("confirmation")?.value !== "DELETE TERMS AUDIT";
-});
-
-deleteTermsForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const button = deleteTermsForm.querySelector("button");
-  button.disabled = true;
-  loading?.busy(deleteTermsForm, "Deleting terms audit records");
-  try {
-    const result = await api("/api/executive/terms-acceptances", {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-Token": csrf,
-      },
-      body: JSON.stringify({
-        confirmation: deleteTermsForm.elements.namedItem("confirmation").value,
-      }),
-    });
-    show(`${result.deleted_terms_acceptances || 0} terms audit records deleted.`);
-    deleteTermsForm.reset();
-  } catch (error) {
-    show(error.message, true);
-  } finally {
-    button.disabled = true;
-    loading?.end(deleteTermsForm);
   }
 });
 

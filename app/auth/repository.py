@@ -182,6 +182,8 @@ def google_account(claims, invitation_token=None):
                             {"id": user_id,"name": claims.get("name") or email,"picture": claims.get("picture")},
                         )
                     else:
+                        if setting_enabled('invite_request_enabled', False):
+                            raise AccountUnavailable('Invitation-only access: request an invitation, then use the approved signup link. Existing users can still log in.')
                         if not setting_enabled("google_new_accounts_enabled", True):
                             raise AccountUnavailable("New Google accounts are disabled")
                         account_type = admission_type(conn, email, invitation_token)

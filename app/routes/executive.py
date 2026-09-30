@@ -90,20 +90,6 @@ def executive_flush_data(
         raise HTTPException(422, "Type DELETE ALL DATA to confirm.")
     try:
         result = maintenance.flush_application_data()
-        request.session.clear()
         return {"ok": True, **result}
     except SQLAlchemyError:
         raise HTTPException(503, "Could not flush data. Check database readiness.") from None
-
-
-@router.delete("/api/executive/terms-acceptances")
-def executive_delete_terms_acceptances(
-    payload: ExecutiveFlushInput,
-    user=Depends(require_executive),
-):
-    if payload.confirmation != "DELETE TERMS AUDIT":
-        raise HTTPException(422, "Type DELETE TERMS AUDIT to confirm.")
-    try:
-        return {"ok": True, **maintenance.delete_terms_acceptance_audit()}
-    except SQLAlchemyError:
-        raise HTTPException(503, "Could not delete terms audit records.") from None

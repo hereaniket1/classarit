@@ -177,33 +177,17 @@ class OwnerCases:
             settings = conn.execute(text("SELECT count(*) FROM classarit.app_settings")).scalar_one()
             migrations = conn.execute(text("SELECT count(*) FROM classarit.schema_migrations")).scalar_one()
             terms_after_flush = conn.execute(text("SELECT count(*) FROM classarit.user_terms_acceptances")).scalar_one()
-        self.assertEqual(users, 0)
+        self.assertEqual(users, 1)
         self.assertEqual(workspaces, 0)
-        self.assertEqual(sessions, 0)
+        self.assertEqual(sessions, 1)
         self.assertEqual(settings, 5)
         self.assertGreater(migrations, 0)
-        self.assertEqual(terms_after_flush, terms_before)
-        self.assertFalse(self.client.get("/auth/me").json()["authenticated"])
+        self.assertEqual(terms_after_flush, 0)
+        self.assertTrue(self.client.get("/auth/me").json()["authenticated"])
 
-        csrf = self.login(email="aniketpathak1@gmail.com")
-        rejected = self.client.request(
-            "DELETE",
-            "/api/executive/terms-acceptances",
-            headers={"X-CSRF-Token": csrf},
-            json={"confirmation": "DELETE ALL DATA"},
-        )
-        self.assertEqual(rejected.status_code, 422, rejected.text)
-        deleted = self.client.request(
-            "DELETE",
-            "/api/executive/terms-acceptances",
-            headers={"X-CSRF-Token": csrf},
-            json={"confirmation": "DELETE TERMS AUDIT"},
-        )
-        self.assertEqual(deleted.status_code, 200, deleted.text)
-        self.assertGreaterEqual(deleted.json()["deleted_terms_acceptances"], terms_before)
-        with auth_engine().connect() as conn:
-            terms_after_delete = conn.execute(text("SELECT count(*) FROM classarit.user_terms_acceptances")).scalar_one()
-        self.assertEqual(terms_after_delete, 0)
+        removed = self.client.request('DELETE', '/api/executive/terms-acceptances',
+            headers={'X-CSRF-Token':csrf}, json={'confirmation':'DELETE TERMS AUDIT'})
+        self.assertEqual(removed.status_code, 404)
 
     def test_teacher_overview_has_only_assignments(self):
         self.ws_setup()

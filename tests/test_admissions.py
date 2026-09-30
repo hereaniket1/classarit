@@ -256,7 +256,7 @@ class AdmissionTests(unittest.TestCase):
             ]:
                 with self.subTest(method=method.__name__), self.assertRaises(repository.AccountUnavailable):
                     method(*args)
-            self.assertEqual(gate.call_count, 3)
+            self.assertEqual(gate.call_count, 2)  # Google creation is blocked before admission lookup.
         self.assertFalse(any('INSERT' in str(c.args[0]) for c in self.conn.execute.call_args_list))
 
     def test_existing_google_account_does_not_require_new_approval(self):
@@ -265,6 +265,34 @@ class AdmissionTests(unittest.TestCase):
             row = repository.google_account({'sub': 'existing', 'email': 'a@example.com', 'email_verified': True})
         self.assertFalse(row['is_new_user'])
         gate.assert_not_called()
+
+    def test_invitation_mode_blocks_new_google_even_if_approved(self):
+        self.conn.execute.return_value = result(None)
+        with patch.object(repository, 'auth_engine', return_value=self.engine), patch.object(repository, 'setting_enabled', return_value=True), patch.object(repository, 'admission_type', return_value='INDIVIDUAL') as gate:
+            with self.assertRaises(repository.AccountUnavailable) as error:
+                repository.google_account({'sub':'new', 'email':'new@example.com', 'email_verified':True})
+        self.assertIn('Invitation-only', str(error.exception))
+        gate.assert_not_called()
+        self.assertEqual(self.conn.execute.call_count, 2)
+
+    def test_existing_verified_password_user_can_link_google_in_invitation_mode(self):
+        self.conn.execute.side_effect = [result(None), result({'app_user_id':uuid4(), 'verified_at':True, 'status':'ACTIVE'}), result(None), result(None), result(None)]
+        with patch.object(repository, 'auth_engine', return_value=self.engine), patch.object(repository, 'setting_enabled', return_value=True), patch.object(repository, '_link_verified_contacts'):
+            response = repository.google_account({'sub':'link', 'email':'existing@example.com', 'email_verified':True})
+        self.assertFalse(response['is_new_user'])
+
+    def test_password_login_keeps_existing_users_and_never_creates_new_users(self):
+        user_id = uuid4()
+        for row in [None, {'id':user_id, 'status':'ACTIVE', 'password_hash':'test'}]:
+            self.conn.execute.reset_mock()
+            self.conn.execute.return_value = result(row)
+            with patch.object(repository, 'auth_engine', return_value=self.engine), patch.object(repository, 'setting_enabled', return_value=True), patch.object(repository, 'PASSWORD_HASHER', MagicMock(verify=MagicMock(return_value=True), check_needs_rehash=MagicMock(return_value=False))):
+                if row:
+                    self.assertEqual(repository.password_account('a@example.com', 'password')['id'], str(user_id))
+                else:
+                    with self.assertRaises(repository.AccountUnavailable):
+                        repository.password_account('a@example.com', 'password')
+            self.assertEqual(self.conn.execute.call_count, 1)
 
     def test_signup_account_type_must_match_approved_request(self):
         self.assertEqual(repository.resolve_account_type('INDIVIDUAL'), 'INDIVIDUAL')
@@ -333,6 +361,29 @@ class AdmissionTests(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 422)
         self.assertIn('account_type', response.text)
+
+    def test_reset_requires_executive_csrf_and_exact_confirmation(self):
+        from app.routes.executive import executive_flush_data, ExecutiveFlushInput
+        from app.services import maintenance
+        request = MagicMock()
+        request.session = {'sid':'protected-session', 'csrf':'protected-csrf'}
+        with patch.object(maintenance, 'flush_application_data', return_value={'preserved_auth_email':'aniketpathak1@gmail.com'}) as reset:
+            with self.assertRaises(HTTPException):
+                executive_flush_data(ExecutiveFlushInput(confirmation='delete'), request, {})
+            reset.assert_not_called()
+            response = executive_flush_data(ExecutiveFlushInput(confirmation='DELETE ALL DATA'), request, {})
+            self.assertTrue(response['ok'])
+            self.assertEqual(request.session['sid'], 'protected-session')
+        async def no_metrics(*args):
+            pass
+        with patch('app.main.record_api_metric', no_metrics), patch.object(maintenance, 'flush_application_data') as reset:
+            client = TestClient(app)
+            for user, expected in [(None, 401), ({'email':'other@example.com'}, 403), ({'email':'aniketpathak1@gmail.com'}, 403)]:
+                with patch('app.auth.dependencies.current_user', return_value=user):
+                    response = client.post('/api/executive/flush-data', json={'confirmation':'DELETE ALL DATA'})
+                    self.assertEqual(response.status_code, expected)
+            self.assertEqual(client.request('DELETE', '/api/executive/terms-acceptances').status_code, 404)
+            reset.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -84,6 +84,12 @@ try {
   await page.screenshot({path:path.join(fixtures,'loading-page-transition.png'),fullPage:true});
   await page.evaluate(()=>window.ClassaritLoading.unlockPage());
   await page.goto('http://classarit.test/executive');
+  assert.equal(await page.locator('#delete-terms-form').count(),0);
+  assert.equal(await page.getByRole('button',{name:'Delete all data',exact:true}).count(),1);
+  assert.equal(await page.getByRole('button',{name:'Delete all data',exact:true}).isDisabled(),true);
+  await page.locator('#flush-data-form [name=confirmation]').fill('DELETE ALL DATA');
+  assert.equal(await page.getByRole('button',{name:'Delete all data',exact:true}).isEnabled(),true);
+  await page.locator('#flush-data-form [name=confirmation]').fill('');
   console.log('Request form passed; checking executive actions');
   await page.getByRole('button',{name:'Approve',exact:true}).click();
   await page.getByRole('button',{name:'Send invitation',exact:true}).waitFor();
