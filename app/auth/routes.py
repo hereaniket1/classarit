@@ -82,10 +82,13 @@ def sign_in(request, user):
     repository.revoke_session(request.session.get('sid'))
     sid = repository.create_session(user['id'])
     pending_invitation = request.session.get('pending_invitation')
+    invitation_review_next = request.session.get('invitation_review_next')
     request.session.clear()
     request.session.update(sid=sid, csrf=secrets.token_urlsafe(32))
     if pending_invitation:
         request.session['pending_invitation'] = pending_invitation
+    if invitation_review_next:
+        request.session['invitation_review_next'] = invitation_review_next
 
 
 def request_ip(request):
@@ -326,6 +329,8 @@ def me(request: Request):
     payload = {'authenticated': bool(user)}
     if user and request.session.get('google_profile_required'):
         payload['next_url'] = '/auth/google/profile'
+    elif user and request.session.get('invitation_review_next'):
+        payload['next_url'] = request.session['invitation_review_next']
     return JSONResponse(payload, headers={'Cache-Control':'no-store'})
 
 

@@ -55,6 +55,7 @@ def context(request, user, **extra):
 
 @router.get("/executive", response_class=HTMLResponse)
 def executive_page(request: Request, user=Depends(require_executive)):
+    request.session.pop('invitation_review_next', None)
     return templates.TemplateResponse("executive_dashboard.html", context(request, user))
 
 

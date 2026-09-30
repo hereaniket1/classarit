@@ -21,16 +21,17 @@ try {
     if(url.hostname!=='classarit.test') { await route.abort(); return; }
     const payload=route.request().postDataJSON();
     const json=body=>route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
-    if(url.pathname.startsWith('/api/') || url.pathname==='/auth/invitation-requests' || url.pathname==='/auth/password/login') {
+    if(url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/invitation-requests') || url.pathname==='/auth/password/login') {
       requests.push({url:url.pathname,method:route.request().method(),payload});
-      if(url.pathname==='/auth/invitation-requests') { await new Promise(resolve=>setTimeout(resolve,180)); return json({ok:true,message:'Your request has been received.'}); }
+      if(url.pathname==='/auth/invitation-requests') { await new Promise(resolve=>setTimeout(resolve,180)); return json({ok:true,verification_required:true,challenge_id:'124ac1a1-a1a1-4000-8000-000000000001',message:'Check your email for the access-request verification code.'}); }
+      if(url.pathname==='/auth/invitation-requests/verify') { await new Promise(resolve=>setTimeout(resolve,180)); return json({ok:true,message:'Email verified. Your request details have been emailed to you.'}); }
       if(url.pathname==='/auth/password/login') { await new Promise(resolve=>setTimeout(resolve,220)); return route.fulfill({status:401,contentType:'application/json',body:JSON.stringify({detail:'Login check failed.'})}); }
       if(url.pathname==='/api/executive/dashboard') return json({settings:{invite_request_enabled:invitationMode},registrations:{},api:{}});
       if(url.pathname==='/api/executive/settings') { invitationMode=payload.invite_request_enabled; return json({settings:{invite_request_enabled:invitationMode}}); }
       if(url.pathname==='/api/executive/terms') return json({title:'Review terms',body:'Review text'});
       if(url.pathname==='/api/executive/invitation-requests') return json({requests:[{id:'request-1',full_name:'<img src=x onerror=alert(1)>',email:'review@example.com',country:'IN',usage_type:'ORGANIZATION',status:requestStatus,requested_at:'2026-09-29T10:00:00Z'}],has_more:false});
       if(route.request().method()==='PATCH') requestStatus=payload.status;
-      return json({ok:true});
+      return json({ok:true,email_sent:true});
     }
     const file=url.pathname.startsWith('/static/') ? path.join(root,'app',url.pathname) : path.join(fixtures,url.pathname.slice(1)+'.html');
     try { await route.fulfill({body:await fs.readFile(file),contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'}); }
@@ -60,8 +61,14 @@ try {
   await form.locator('[name=usage_type]').selectOption('ORGANIZATION');
   await form.locator('button').click();
   assert.equal(await form.locator('button .action-spinner').count(),1);
-  await page.waitForFunction(()=>document.querySelector('#invitation-request-status').textContent.includes('received'));
+  await page.locator('#invitation-verify-form').waitFor();
   assert.equal(requests.find(r=>r.url==='/auth/invitation-requests').payload.usage_type,'ORGANIZATION');
+  await page.locator('#invitation-verify-form [name=code]').fill('123456');
+  await page.locator('#invitation-verify-form button[type=submit]').click();
+  await page.locator('.global-page-loader.is-operation-lock').waitFor();
+  await page.waitForFunction(()=>document.querySelector('#invitation-request-status').textContent.includes('Email verified'));
+  assert.equal(await page.locator('#invitation-verify-form').isVisible(),false);
+  assert.equal(requests.find(r=>r.url==='/auth/invitation-requests/verify').payload.code,'123456');
   await page.goto('http://classarit.test/login');
   await page.locator('#password-login-form [name=email]').fill('review@example.com');
   await page.locator('#password-login-form [name=password]').fill('incorrect-password');

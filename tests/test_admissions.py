@@ -87,7 +87,7 @@ class AdmissionTests(unittest.TestCase):
         payload = InterestInput(full_name='Applicant', email='TEST@example.com', country='IN', usage_type='INDIVIDUAL')
         with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, 'setting_enabled', return_value=True), patch.object(admissions, 'send_email') as send:
             self.assertTrue(admissions.request_invitation(payload)['ok'])
-        self.assertFalse(any('UPDATE' in str(c.args[0]) or 'INSERT' in str(c.args[0]) for c in self.conn.execute.call_args_list))
+        self.assertFalse(any(str(c.args[0]).lstrip().startswith(('UPDATE', 'INSERT')) for c in self.conn.execute.call_args_list))
         send.assert_not_called()
 
     def test_existing_account_cannot_request_invitation(self):
@@ -117,11 +117,114 @@ class AdmissionTests(unittest.TestCase):
                 admissions.request_invitation(MagicMock())
         self.assertEqual(error.exception.status_code, 409)
 
-    def test_approval_never_automatically_sends_email(self):
+    def test_approval_automatically_sends_email(self):
         self.conn.execute.return_value = result({'id': uuid4(), 'status': 'APPROVED'})
-        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, 'send_email') as send:
-            admissions.review_request(uuid4(), 'APPROVED', uuid4())
+        request_id = uuid4()
+        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, 'email_approval') as send:
+            response = admissions.review_request(request_id, 'APPROVED', uuid4(), 'https://classarit.test/login#signup')
+        self.assertTrue(response['email_sent'])
+        send.assert_called_once_with(request_id, 'https://classarit.test/login#signup')
+
+    def test_approval_survives_email_failure_with_retry_message(self):
+        self.conn.execute.return_value = result({'id': uuid4(), 'status': 'APPROVED'})
+        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, 'email_approval', side_effect=HTTPException(502, 'Retry delivery')):
+            response = admissions.review_request(uuid4(), 'APPROVED', uuid4(), 'https://classarit.test/login')
+        self.assertFalse(response['email_sent'])
+        self.assertEqual(response['email_error'], 'Retry delivery')
+        self.engine.begin.return_value.__exit__.assert_called_once_with(None, None, None)
+
+    def test_unverified_request_cannot_be_approved(self):
+        self.conn.execute.return_value = result(None)
+        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, 'email_approval') as send:
+            with self.assertRaises(HTTPException):
+                admissions.review_request(uuid4(), 'APPROVED', uuid4(), 'https://classarit.test/login')
+        self.assertIn('email_verified_at IS NOT NULL', str(self.conn.execute.call_args.args[0]))
         send.assert_not_called()
+
+    def test_new_request_uses_separate_otp_and_notifies_owner(self):
+        request_id = uuid4()
+        self.conn.execute.side_effect = [result(None), result(None), result(None), result({'id':request_id}), result(None)]
+        payload = InterestInput(full_name='Applicant', email='TEST@example.com', country='IN', usage_type='INDIVIDUAL')
+        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, 'setting_enabled', return_value=True), patch.object(admissions, '_deliver') as deliver, patch.object(admissions, '_notify_owner') as owner, patch.object(repository, 'generate_otp', return_value='123456'):
+            response = admissions.request_invitation(payload, 'https://classarit.test')
+        self.assertTrue(response['verification_required'])
+        self.assertNotIn('123456', str(response))
+        params = self.conn.execute.call_args.args[1]
+        self.assertEqual(params['digest'], repository.challenge_digest(params['challenge'], 'INVITATION_REQUEST_OTP', 'test@example.com', '123456'))
+        deliver.assert_called_once()
+        self.assertEqual(deliver.call_args.args[0], 'test@example.com')
+        owner.assert_called_once_with(request_id, 'https://classarit.test')
+
+    def test_resend_cooldown_blocks_mail(self):
+        self.conn.execute.side_effect = [result(None), result(None), result({'verification_required':True, 'recent':True})]
+        payload = InterestInput(full_name='A', email='a@example.com', country='IN', usage_type='INDIVIDUAL')
+        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, 'setting_enabled', return_value=True), patch.object(admissions, '_deliver') as deliver:
+            with self.assertRaises(HTTPException) as error:
+                admissions.request_invitation(payload)
+        self.assertEqual(error.exception.status_code, 429)
+        deliver.assert_not_called()
+
+    def test_invalid_otp_attempt_is_committed(self):
+        self.conn.execute.return_value = result({'id':uuid4(), 'email':'a@example.com', 'unexpired':True, 'verification_attempts':0, 'verification_digest':'invalid'})
+        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, '_notify_owner') as owner:
+            with self.assertRaises(HTTPException):
+                admissions.verify_request(uuid4(), '123456', 'https://classarit.test')
+        self.assertIn('verification_attempts+1', str(self.conn.execute.call_args.args[0]))
+        self.engine.begin.return_value.__exit__.assert_called_once_with(None, None, None)
+        owner.assert_not_called()
+
+    def test_expired_or_exhausted_otp_cannot_verify(self):
+        for row in [None, {'unexpired':False}, {'unexpired':True, 'verification_attempts':5}]:
+            with self.subTest(row=row), patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, '_deliver') as deliver:
+                self.conn.execute.reset_mock()
+                self.conn.execute.return_value = result(row)
+                with self.assertRaises(HTTPException):
+                    admissions.verify_request(uuid4(), '123456', 'https://classarit.test')
+                self.assertEqual(self.conn.execute.call_count, 1)
+                deliver.assert_not_called()
+
+    def test_verified_request_receipt_is_idempotent(self):
+        challenge = uuid4()
+        row = {'id':uuid4(), 'email':'a@example.com', 'unexpired':True, 'verification_attempts':0,
+               'verification_digest':repository.challenge_digest(challenge, 'INVITATION_REQUEST_OTP', 'a@example.com', '123456'),
+               'receipt_sent_at':None, 'full_name':'<Applicant>', 'status':'PENDING'}
+        self.conn.execute.return_value = result(row)
+        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, '_deliver') as deliver, patch.object(admissions, '_notify_owner'):
+            self.assertTrue(admissions.verify_request(challenge, '123456', 'https://classarit.test')['ok'])
+            self.assertIn('&lt;Applicant&gt;', deliver.call_args.args[2])
+            row['receipt_sent_at'] = 'already sent'
+            admissions.verify_request(challenge, '123456', 'https://classarit.test')
+            deliver.assert_called_once()
+
+    def test_owner_email_contains_details_and_confirmable_links(self):
+        request_id = uuid4()
+        self.conn.execute.return_value = result({'id':request_id, 'full_name':'<Applicant>', 'email':'a@example.com', 'country':'IN', 'usage_type':'INDIVIDUAL', 'owner_notified_at':None})
+        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, '_deliver') as deliver:
+            admissions._notify_owner(request_id, 'https://classarit.test/')
+        to, subject, body = deliver.call_args.args
+        self.assertEqual(to, 'aniketpathak1@gmail.com')
+        self.assertIn('&lt;Applicant&gt;', body)
+        self.assertIn(f'/invitation-review/{request_id}/APPROVED', body)
+        self.assertIn(f'/invitation-review/{request_id}/REJECTED', body)
+
+    def test_review_link_preserves_destination_without_mutation(self):
+        request_id = uuid4()
+        with patch('app.routes.admissions.current_user', return_value=None), patch.object(admissions, 'review_request') as review:
+            response = TestClient(app).get(f'/invitation-review/{request_id}/APPROVED', follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers['location'], '/login')
+        self.assertIn('no-store', response.headers['cache-control'])
+        review.assert_not_called()
+
+    def test_review_destination_survives_login_session_rotation(self):
+        from app.auth.routes import sign_in
+        request = MagicMock()
+        destination = f'/executive#request={uuid4()}&decision=APPROVED'
+        request.session = {'sid':'old-session', 'invitation_review_next':destination}
+        with patch.object(repository, 'revoke_session'), patch.object(repository, 'create_session', return_value='new-session'):
+            sign_in(request, {'id':uuid4()})
+        self.assertEqual(request.session['sid'], 'new-session')
+        self.assertEqual(request.session['invitation_review_next'], destination)
 
     def test_failed_email_does_not_record_delivery(self):
         self.conn.execute.return_value = result({'status': 'APPROVED', 'email': 'a@example.com', 'full_name': 'A', 'recently_sent': False})

@@ -1,6 +1,8 @@
 (() => {
   const invitationForm = document.getElementById('invitation-request-form');
   const invitationPanel = invitationForm?.closest('section');
+  const invitationVerify = document.getElementById('invitation-verify-form');
+  const invitationVerifyStatus = document.getElementById('invitation-verify-status');
   invitationForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const button = invitationForm.querySelector('button[type=submit]');
@@ -12,9 +14,32 @@
       const payload = await response.json();
       if (!response.ok) throw new Error(typeof payload.detail === 'string' ? payload.detail : 'Check your request details and try again.');
       status.textContent = payload.message;
-      invitationForm.reset();
+      if (payload.verification_required) {
+        invitationVerify.hidden = false;
+        invitationVerify.elements.challenge_id.value = payload.challenge_id;
+        invitationVerifyStatus.textContent = payload.message;
+        invitationVerify.elements.code.value = '';
+        invitationVerify.elements.code.focus();
+      }
     } catch (error) { status.textContent = error.message; }
     finally { button.disabled = false; }
+  });
+  document.getElementById('invitation-resend')?.addEventListener('click', () => invitationForm.requestSubmit());
+  invitationVerify?.addEventListener('submit', async event => {
+    event.preventDefault();
+    window.ClassaritLoading?.lockPage('Verifying access request');
+    try {
+      const response = await fetch('/auth/invitation-requests/verify', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(Object.fromEntries(new FormData(invitationVerify)))
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(typeof payload.detail === 'string' ? payload.detail : 'Verification failed. Please retry.');
+      invitationVerify.hidden = true;
+      invitationForm.reset();
+      document.getElementById('invitation-request-status').textContent = payload.message;
+    } catch (error) { invitationVerifyStatus.textContent = error.message; }
+    finally { window.ClassaritLoading?.unlockPage(); }
   });
   const signupPanel = document.getElementById('signup-panel');
   const showInvitation = () => {
@@ -105,7 +130,8 @@
     loading?.lockPage('Signing in');
     try {
       await json('/auth/password/login', Object.fromEntries(new FormData(loginForm)));
-      loading?.navigate('/dashboard', 'dashboard') || window.location.assign('/dashboard');
+      const destination = await loginDestination();
+      loading?.navigate(destination, 'dashboard') || window.location.assign(destination);
     } catch (error) {
       loginFormStatus.textContent = error.message;
       loading?.unlockPage();

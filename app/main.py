@@ -58,7 +58,7 @@ async def private_responses(request: Request, call_next):
     started = time.perf_counter()
     response = await call_next(request)
     latency_ms = int((time.perf_counter() - started) * 1000)
-    if request.url.path.startswith(('/auth/', '/api/', '/uploads/', '/dashboard', '/login', '/profile', '/workspaces/', '/invitations/', '/legacy/', '/executive', '/static/')):
+    if request.url.path.startswith(('/auth/', '/api/', '/uploads/', '/dashboard', '/login', '/profile', '/workspaces/', '/invitations/', '/invitation-review/', '/legacy/', '/executive', '/static/')):
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'

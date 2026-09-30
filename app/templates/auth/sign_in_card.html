@@ -25,6 +25,14 @@
         <button type="submit" class="btn btn-primary">Request invitation</button>
         <p id="invitation-request-status" role="status" aria-live="polite"></p>
       </form>
+      <form id="invitation-verify-form" hidden>
+        <input type="hidden" name="challenge_id">
+        <p>Verify the email for your access request. This does not create a Classarit account.</p>
+        <label>Verification code<input class="form-control" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+        <button type="submit" class="btn btn-primary">Verify access request</button>
+        <button type="button" id="invitation-resend" class="btn btn-outline-primary">Resend code</button>
+        <p id="invitation-verify-status" role="status" aria-live="polite"></p>
+      </form>
     </section>
     {% endif %}
     <section class="signup-panel" id="signup-panel" data-email-verification="{{ 'true' if email_verification_enabled else 'false' }}" {% if not signup_enabled %}data-disabled="true"{% endif %} hidden>

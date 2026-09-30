@@ -31,6 +31,7 @@ def admission_type(conn, email, invitation_token=None):
             return None
     row = conn.execute(text(f"""SELECT usage_type FROM {s}.interest
         WHERE lower(email::text)=:email AND status='APPROVED'
+          AND (NOT verification_required OR email_verified_at IS NOT NULL)
         ORDER BY approved_at DESC LIMIT 1 FOR SHARE"""), {'email': email}).mappings().first()
     if not row:
         # Import here avoids a module cycle with the registration repository.
@@ -39,10 +40,39 @@ def admission_type(conn, email, invitation_token=None):
     return row['usage_type']
 
 
-def request_invitation(payload):
-    from ..auth.repository import (
-        ACCOUNT_EXISTS_MESSAGE, AccountUnavailable, normalize_email,
-    )
+def _deliver(to, subject, body):
+    try:
+        result = send_email(to, subject, body, None)
+    except Exception:
+        raise HTTPException(502, 'Email delivery failed. Please retry.') from None
+    if not result or not result.get('id'):
+        raise HTTPException(503, 'Email delivery is unavailable. Please retry.')
+
+
+def _details(row):
+    return ''.join(f'<p><strong>{label}:</strong> {escape(str(row.get(key) or "Not supplied"))}</p>'
+        for label, key in [('Name','full_name'), ('Email','email'), ('Country','country'),
+                           ('Account type','usage_type'), ('Request ID','id'), ('Requested at','requested_at')])
+
+
+def _notify_owner(request_id, base_url):
+    with auth_engine().begin() as conn:
+        row = conn.execute(text(f'SELECT * FROM {schema_name()}.interest WHERE id=:id FOR UPDATE'),
+                           {'id': request_id}).mappings().first()
+        if row['owner_notified_at']:
+            return
+        link = escape(base_url.rstrip('/') + '/invitation-review/' + str(row['id']), quote=True)
+        _deliver('aniketpathak1@gmail.com', 'New Classarit access request',
+                 '<h2>New access request</h2>' + _details(row) +
+                 '<p>Email verification is required before approval. Sign in with your executive account to confirm your decision.</p>' +
+                 f'<p><a href="{link}/APPROVED">Review and approve access</a></p>' +
+                 f'<p><a href="{link}/REJECTED">Review and decline access</a></p>')
+        conn.execute(text(f'UPDATE {schema_name()}.interest SET owner_notified_at=CURRENT_TIMESTAMP WHERE id=:id'), {'id': request_id})
+
+
+def request_invitation(payload, base_url=''):
+    from uuid import uuid4
+    from ..auth.repository import ACCOUNT_EXISTS_MESSAGE, AccountUnavailable, normalize_email, generate_otp, challenge_digest
     if not setting_enabled('invite_request_enabled', False):
         raise HTTPException(409, 'Invitation requests are closed. You can use the signup form.')
     try:
@@ -50,44 +80,96 @@ def request_invitation(payload):
     except AccountUnavailable as error:
         raise HTTPException(422, str(error)) from None
     with auth_engine().begin() as conn:
-        # Serialize duplicate requests without relying on an unknown historical index.
         conn.execute(text('SELECT pg_advisory_xact_lock(hashtextextended(:email, 814))'), {'email': email})
-        account = conn.execute(text(f"""SELECT 1 FROM {schema_name()}.user_emails
-            WHERE lower(email::text)=:email LIMIT 1"""), {'email': email}).first()
-        if account:
+        if conn.execute(text(f'SELECT 1 FROM {schema_name()}.user_emails WHERE lower(email::text)=:email LIMIT 1'), {'email':email}).first():
             raise HTTPException(409, ACCOUNT_EXISTS_MESSAGE)
-        existing = conn.execute(text(f'SELECT id FROM {schema_name()}.interest WHERE lower(email::text)=:email LIMIT 1'), {'email': email}).first()
-        if not existing:
-            conn.execute(text(f"""INSERT INTO {schema_name()}.interest(full_name,email,country,usage_type)
-                VALUES (:name,:email,:country,:kind)"""),
-                {'name': payload.full_name, 'email': email, 'country': payload.country, 'kind': payload.usage_type})
-    # Same response for duplicates; public callers cannot inspect approval state.
-    return {'ok': True, 'message': 'Your request has been received. We will email you if it is approved.'}
+        row = conn.execute(text(f"""SELECT *, verification_sent_at > CURRENT_TIMESTAMP - interval '1 minute' AS recent
+            FROM {schema_name()}.interest WHERE lower(email::text)=:email ORDER BY requested_at DESC LIMIT 1 FOR UPDATE"""), {'email':email}).mappings().first()
+        if row and (not row.get('verification_required') or
+                    (row.get('email_verified_at') and row.get('receipt_sent_at') and row.get('owner_notified_at'))):
+            return {'ok':True, 'message':'Your request is already recorded. Wait for the access decision or log in if you have an account.'}
+        if row and row['recent']:
+            raise HTTPException(429, 'Wait one minute before requesting another verification code.')
+        if not row:
+            row = conn.execute(text(f"""INSERT INTO {schema_name()}.interest(full_name,email,country,usage_type,verification_required)
+                VALUES (:name,:email,:country,:kind,true) RETURNING *"""),
+                {'name':payload.full_name,'email':email,'country':payload.country,'kind':payload.usage_type}).mappings().first()
+        request_id, challenge_id, code = row['id'], uuid4(), generate_otp()
+        conn.execute(text(f"""UPDATE {schema_name()}.interest SET verification_id=:challenge,
+            verification_digest=:digest,verification_expires_at=CURRENT_TIMESTAMP+interval '10 minutes',
+            verification_attempts=0,verification_sent_at=CURRENT_TIMESTAMP WHERE id=:id"""),
+            {'id':request_id,'challenge':challenge_id,'digest':challenge_digest(challenge_id,'INVITATION_REQUEST_OTP',email,code)})
+        _deliver(email, 'Verify your Classarit access request',
+                 f'<h2>Verify your email</h2><p>Your access-request verification code is <strong>{code}</strong>.</p>'
+                 '<p>Expires in 10 minutes. This verifies an invitation request only; it does not create an account or grant access.</p>')
+    notification_pending = False
+    try:
+        _notify_owner(request_id, base_url)
+    except HTTPException:
+        notification_pending = True
+    return {'ok':True,'verification_required':True,'challenge_id':str(challenge_id),
+            'notification_pending':notification_pending,'message':'Check your email for the access-request verification code.'}
 
 
-def list_requests(status='PENDING', offset=0):
+def verify_request(challenge_id, code, base_url):
+    import hmac
+    from ..auth.repository import challenge_digest
+    invalid = False
+    with auth_engine().begin() as conn:
+        row = conn.execute(text(f"""SELECT *, verification_expires_at>CURRENT_TIMESTAMP AS unexpired
+            FROM {schema_name()}.interest WHERE verification_id=:id FOR UPDATE"""), {'id':challenge_id}).mappings().first()
+        if not row or not row['unexpired'] or row['verification_attempts'] >= 5:
+            raise HTTPException(400, 'Code expired or unavailable. Request a new code.')
+        expected = challenge_digest(challenge_id,'INVITATION_REQUEST_OTP',str(row['email']).lower(),code)
+        if not hmac.compare_digest(expected,row['verification_digest'] or ''):
+            conn.execute(text(f'UPDATE {schema_name()}.interest SET verification_attempts=verification_attempts+1 WHERE id=:id'), {'id':row['id']})
+            invalid = True
+        else:
+            conn.execute(text(f'UPDATE {schema_name()}.interest SET email_verified_at=COALESCE(email_verified_at,CURRENT_TIMESTAMP) WHERE id=:id'), {'id':row['id']})
+    if invalid:
+        raise HTTPException(400, 'Incorrect verification code.')
+    # Verification stays committed even if delivery fails; the same code can retry delivery until expiry.
+    _notify_owner(row['id'], base_url)
+    with auth_engine().begin() as conn:
+        current = conn.execute(text(f'SELECT * FROM {schema_name()}.interest WHERE id=:id FOR UPDATE'), {'id':row['id']}).mappings().first()
+        if not current['receipt_sent_at']:
+            _deliver(str(current['email']), 'Your Classarit access request is verified',
+                     '<h2>Email verified</h2><p>Your access request has been recorded. This is not account signup.</p>' +
+                     f'<p>Current status: {escape(current["status"])}</p>' + _details(current))
+            conn.execute(text(f'UPDATE {schema_name()}.interest SET receipt_sent_at=CURRENT_TIMESTAMP WHERE id=:id'), {'id':row['id']})
+    return {'ok':True,'message':'Email verified. Your request details have been emailed to you. We will email you when access is granted.'}
+
+
+def list_requests(status='PENDING', offset=0, request_id=None):
     with auth_engine().connect() as conn:
         rows = conn.execute(text(f"""SELECT id,full_name,email,country,usage_type,status,
-            requested_at,approved_at,last_email_sent_at FROM {schema_name()}.interest
-            WHERE (:status='ALL' OR status=:status)
-            ORDER BY requested_at DESC,id LIMIT 51 OFFSET :offset"""), {'status': status, 'offset': offset}).mappings().all()
+            requested_at,approved_at,last_email_sent_at,email_verified_at,verification_required FROM {schema_name()}.interest
+            WHERE (:status='ALL' OR status=:status) AND (CAST(:request_id AS uuid) IS NULL OR id=CAST(:request_id AS uuid))
+            ORDER BY requested_at DESC,id LIMIT 51 OFFSET :offset"""), {'status': status, 'offset': offset, 'request_id': request_id}).mappings().all()
     return {'requests': [dict(row) for row in rows[:50]], 'has_more': len(rows)>50}
 
 
-def review_request(request_id, status, reviewer):
+def review_request(request_id, status, reviewer, signup_url=None):
     with auth_engine().begin() as conn:
         row = conn.execute(text(f"""UPDATE {schema_name()}.interest SET status=:status,
             approved_at=CASE WHEN :status='APPROVED' THEN CURRENT_TIMESTAMP ELSE NULL END,
             approved_by=CASE WHEN :status='APPROVED' THEN :reviewer ELSE NULL END
-            WHERE id=:id RETURNING id,status"""),
+            WHERE id=:id AND (:status!='APPROVED' OR NOT verification_required OR email_verified_at IS NOT NULL) RETURNING id,status"""),
             {'id': request_id, 'status': status, 'reviewer': UUID(str(reviewer))}).mappings().first()
         if not row:
-            raise HTTPException(404, 'Request not found.')
-    return dict(row)
+            raise HTTPException(409, 'Request not found or applicant email is not verified.')
+    result = dict(row)
+    if status == 'APPROVED' and signup_url:
+        try:
+            email_approval(request_id, signup_url)
+            result['email_sent'] = True
+        except HTTPException as error:
+            result.update(email_sent=False, email_error=error.detail)
+    return result
 
 
 def email_approval(request_id, signup_url):
-    """Explicit executive action; report actual provider success, never fake delivery."""
+    """Send after approval or explicit executive retry; record provider acceptance."""
     if not setting_enabled('notification_emails_enabled', True):
         raise HTTPException(409, 'Enable operational emails before sending an invitation.')
     with auth_engine().begin() as conn:
