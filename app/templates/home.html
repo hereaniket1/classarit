@@ -1,20 +1,56 @@
 {% extends "public_base.html" %}
+{% from "components/icons.html" import icon %}
+{% block body_class %}public-page landing-page{% endblock %}
 {% block content %}
 <main class="landing">
-  <section class="hero">
+  <section class="landing-hero" aria-labelledby="landing-title">
     <div class="hero-copy">
-      <p class="eyebrow">YOUR CLASSROOM, CONNECTED</p>
-      <h1>More time to teach.<br><span>Room to grow.</span></h1>
-      <p class="hero-description">Your students, classes and payments, all in one place. Bring a little more calm to the way you teach.</p>
-      <div class="hero-actions"><a class="btn btn-primary btn-lg" href="#sign-in" data-login>Log in to your classroom <span aria-hidden="true">→</span></a><a class="btn btn-link" href="/login#signup" data-signup>New to Classarit?</a></div>
-      <p class="hero-note">Made for independent teachers and the students they inspire.</p>
+      <p class="landing-eyebrow">TEACH <span>·</span> ORGANIZE <span>·</span> GROW</p>
+      <h1 id="landing-title">A calmer way to<br><span>run your classes.</span></h1>
+      <p class="hero-description">Classarit helps organization owners and independent teachers manage students, teachers, schedules, assignments and payments in one place.</p>
+      <div class="hero-actions">
+        {% if invite_request_enabled %}<a class="btn btn-primary btn-lg" href="/login#invitation" data-request-invitation>Request an invite <span aria-hidden="true">→</span></a>{% else %}<a class="btn btn-primary btn-lg" href="/login#signup" data-signup>Sign up <span aria-hidden="true">→</span></a>{% endif %}
+        <a class="btn btn-outline-primary btn-lg" href="#features">Explore features</a>
+      </div>
+      <ul class="hero-trust" aria-label="Early access details">
+        <li>{{ 'Invitation-only testing' if invite_request_enabled else 'Early access signup' }}</li><li>Add students later</li><li>Built with teacher feedback</li>
+      </ul>
     </div>
-    {% include "auth/sign_in_card.html" %}
+    <div class="sprite-crop hero-art" aria-label="Female teacher using Classarit on a laptop" role="img"><img src="/static/landing-reference.png" alt=""></div>
   </section>
-  <section class="feature-strip" aria-label="What you can manage">
-    <article><span class="feature-number">01</span><h2>Know your students</h2><p>Keep profiles, subjects and lesson details together.</p></article>
-    <article><span class="feature-number">02</span><h2>Stay on schedule</h2><p>See your classes and open meeting links from one place.</p></article>
-    <article><span class="feature-number">03</span><h2>Keep track simply</h2><p>View payments and organize your learning materials.</p></article>
+
+  <section class="role-grid" id="for-teachers" aria-label="Classarit for every role">
+    <article class="role-card organization-card">
+      <div class="role-card-heading"><div class="sprite-crop role-art role-art-organization" aria-hidden="true"><img src="/static/landing-reference.png" alt=""></div><div><span class="role-icon">{{ icon('workspaces') }}</span><h2>For organization owners</h2><p>Run multiple programs and people from one central place.</p></div></div>
+      <ul><li>Set up workspaces for piano, dance, sports, math, science and more.</li><li>Add/remove admins and operators</li><li>Add/remove teachers and students</li><li>Monitor workspace dashboards</li><li>Manage payments (coming soon)</li></ul>
+    </article>
+    <article class="role-card teacher-card">
+      <div class="role-card-heading"><div class="sprite-crop role-art role-art-teacher" aria-hidden="true"><img src="/static/landing-reference.png" alt=""></div><div><span class="role-icon">{{ icon('teachers') }}</span><h2>For independent teachers</h2><p>Everything you need to run your teaching from one place.</p></div></div>
+      <ul><li>Create one workspace and run teaching from one place</li><li>Add/remove students</li><li>Schedule classes and manage schedules</li><li>Get notified about upcoming classes, cancellations and pending payments</li><li>Share assignments and learning materials</li></ul>
+    </article>
+    <article class="role-card student-card">
+      <div class="role-card-heading"><div class="sprite-crop role-art role-art-student" aria-hidden="true"><img src="/static/landing-reference.png" alt=""></div><div><span class="role-icon">{{ icon('students') }}</span><h2>For students</h2><p>Stay organized and keep learning with ease.</p></div></div>
+      <ul><li>View upcoming schedules</li><li>Get notified about upcoming classes or cancellations</li><li>Review assignments online</li><li>Practice and revisit learning materials</li><li>Future AI help, recommendations and course-based guidance</li></ul>
+    </article>
+  </section>
+
+  <section class="feature-band available-band" id="features" aria-labelledby="available-title">
+    <div class="band-intro"><span class="status-dot"></span><div><h2 id="available-title">Available now</h2><p>Core features to help you organize and teach today.</p></div></div>
+    <div class="feature-tiles">
+      {% for glyph,label in [('students','Student management'),('teachers','Teacher management'),('calendar','Class scheduling'),('reporting','Workspace dashboards'),('classes','Materials & assignments'),('default','Notifications')] %}<div class="feature-tile"><span>{{ icon(glyph) }}</span><strong>{{ label }}</strong></div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="feature-band coming-band" id="coming-next" aria-labelledby="coming-title">
+    <div class="band-intro"><span class="coming-mark" aria-hidden="true">◷</span><div><h2 id="coming-title">Coming next</h2><p>Exciting features on the way based on your feedback.</p></div></div>
+    <div class="feature-tiles">
+      {% for glyph,label in [('▣','Payments & invoices'),('♙','Student portal enhancements'),('◎','Practice tools'),('✦','AI learning help'),('★','Recommendations'),('↗','Progress tracking')] %}<div class="feature-tile"><span class="text-glyph">{{ glyph }}</span><strong>{{ label }}</strong></div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="landing-cta" aria-label="Early access and support">
+    <article><span class="cta-icon mail-icon" aria-hidden="true">✉</span><div><h2>Join the invite-only testing group</h2><p>Get early access to Classarit and help us make it even better.</p></div>{% if invite_request_enabled %}<a class="btn btn-primary" href="/login#invitation" data-request-invitation>Request an invite →</a>{% else %}<a class="btn btn-primary" href="/login#signup" data-signup>Sign up →</a>{% endif %}</article>
+    <article><span class="cta-icon heart-icon" aria-hidden="true">♥</span><div><h2>Help shape what’s next</h2><p>Love what we’re building? Support independent development and help us build faster.</p></div><a class="btn btn-outline-warm" href="mailto:support@classarit.com">Support Classarit</a></article>
   </section>
 </main>
 {% endblock %}

@@ -16,3 +16,17 @@ for (const sidebar of document.querySelectorAll('.workspace-sidebar, .sidebar'))
 for(const container of document.querySelectorAll('.table-responsive,.table-scroll')){
   container.tabIndex=0;container.setAttribute('role','region');container.setAttribute('aria-label','Scrollable table');
 }
+
+const publicMenuButton=document.querySelector('.public-menu-toggle');
+const publicMenu=document.querySelector('.public-mobile-menu');
+if(publicMenuButton&&publicMenu){
+  const setPublicMenu=open=>{
+    publicMenu.hidden=!open;
+    publicMenuButton.setAttribute('aria-expanded',String(open));
+    publicMenuButton.setAttribute('aria-label',open?'Close navigation':'Open navigation');
+  };
+  publicMenuButton.addEventListener('click',()=>setPublicMenu(publicMenu.hidden));
+  publicMenu.addEventListener('click',event=>{if(event.target.closest('a'))setPublicMenu(false);});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!publicMenu.hidden){setPublicMenu(false);publicMenuButton.focus();}});
+}
+document.querySelector('[data-dismiss-banner]')?.addEventListener('click',event=>event.currentTarget.closest('.early-access-banner')?.remove());

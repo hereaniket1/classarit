@@ -9,13 +9,26 @@
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/auth.css?v=home-signin-20260918">
   <link rel="stylesheet" href="/static/responsive.css?v=home-signin-20260918">
+  <link rel="stylesheet" href="/static/theme.css?v=landing-theme-20260930">
+  <link rel="stylesheet" href="/static/landing.css?v=landing-theme-20260930">
   <script src="/static/loading.js?v=home-signin-20260918" defer></script>
   <script src="/static/auth.js?v=home-signin-20260918" defer></script>
   <script src="/static/responsive.js" defer></script>
 </head>
-<body>
+<body class="{% block body_class %}public-page{% endblock %}">
+  <div class="early-access-banner" role="status">
+    <span class="announcement-icon" aria-hidden="true">⌁</span>
+    <span>{% if invite_request_enabled %}Invitation-only testing — approved accounts can sign in now.{% else %}Classarit early access — new accounts can sign up now.{% endif %}</span>
+    <button type="button" data-dismiss-banner aria-label="Dismiss announcement">×</button>
+  </div>
   <header class="public-header">
     <a class="public-brand" href="/" aria-label="Classarit home"><span class="brand-mark">C</span><span>Classarit</span></a>
+    <nav class="public-section-nav" aria-label="Explore Classarit">
+      <a href="/#features">Features</a>
+      <a href="/#for-teachers">For Teachers</a>
+      <a href="/#coming-next">Pricing</a>
+      <a href="/#about">About</a>
+    </nav>
     <nav class="public-nav" aria-label="Main navigation">
       <a class="login-link" href="/login" data-login>Log in</a>
       {% if invite_request_enabled %}
@@ -24,8 +37,13 @@
       <a class="btn btn-primary" href="/login#signup" data-signup>Sign up</a>
       {% endif %}
     </nav>
+    <button class="public-menu-toggle" type="button" aria-expanded="false" aria-controls="public-mobile-menu" aria-label="Open navigation"><span></span><span></span><span></span></button>
+    <nav class="public-mobile-menu" id="public-mobile-menu" aria-label="Mobile navigation" hidden>
+      <a href="/#features">Features</a><a href="/#for-teachers">For Teachers</a><a href="/#coming-next">Pricing</a><a href="/#about">About</a><a href="/login" data-login>Log in</a>
+      {% if invite_request_enabled %}<a class="btn btn-primary" href="/login#invitation" data-request-invitation>Request an invite</a>{% else %}<a class="btn btn-primary" href="/login#signup" data-signup>Sign up</a>{% endif %}
+    </nav>
   </header>
   {% block content %}{% endblock %}
-  <footer class="public-footer">Classarit <span>·</span> The flow of knowledge.</footer>
+  <footer class="public-footer" id="about"><strong>Classarit</strong><span>·</span> The flow of knowledge.<nav aria-label="Footer navigation"><a href="/#features">Features</a><a href="/#for-teachers">For Teachers</a><a href="/#coming-next">Pricing</a><a href="/#about">About</a></nav></footer>
 </body>
 </html>

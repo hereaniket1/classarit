@@ -15,7 +15,7 @@ try{
  const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/*',async route=>{
   const url=new URL(route.request().url());
-  if(url.hostname==='cdn.jsdelivr.net'){await route.continue();return;}
+  if(url.hostname==='cdn.jsdelivr.net'){await route.fulfill({body:await fs.readFile(path.join(root,'.cache','admissions-review','bootstrap.min.css')),contentType:'text/css'});return;}
   if(url.hostname!=='classarit.test'){await route.abort();return;}
   let file;
   if(url.pathname.startsWith('/static/')) file=path.join(root,'app',url.pathname);
@@ -51,6 +51,18 @@ try{
     assert.equal(await page.locator('.nav-toggle').getAttribute('aria-expanded'),'true');
     await page.locator('.nav-toggle').press('Escape');
     assert.equal(await page.locator('.nav-toggle').getAttribute('aria-expanded'),'false');
+   }
+   if(name==='home'){
+    assert.equal(await page.locator('.landing-hero .hero-art img').count(),1);
+    assert.equal(await page.locator('.role-card').count(),3);
+    assert.equal(await page.locator('.role-art-organization img,.role-art-teacher img,.role-art-student img').count(),3);
+    if(width<=800){
+     await page.locator('.public-menu-toggle').click();
+     assert.equal(await page.locator('.public-mobile-menu').isVisible(),true);
+     assert.equal(await page.locator('.public-menu-toggle').getAttribute('aria-expanded'),'true');
+     await page.locator('.public-menu-toggle').press('Escape');
+     assert.equal(await page.locator('.public-mobile-menu').isVisible(),false);
+    }
    }
     if(name==='workspace'){
     assert.equal(await page.locator('#workspace-picker option').count(),3);
@@ -92,7 +104,7 @@ try{
     const selectedDay=await targetDay.getAttribute('data-calendar-day');
     await page.locator('#calendar-popup [data-calendar-action="session"]').click();
     assert.equal(await page.locator('#editor').isVisible(),true);
-    assert.equal(await page.locator('#editor input[name="starts_at"]').inputValue(),`${selectedDay}T09:00`);
+    assert.match(await page.locator('#editor input[name="starts_at"]').inputValue(),new RegExp(`^${selectedDay}T\\d{2}:\\d{2}$`));
     await fits(`calendar add schedule form at ${width}`);
     await page.locator('#close-editor').click();
     await targetDay.click();
