@@ -1,5 +1,5 @@
-import { api, notice } from "./api.js?v=password-profile-20260917";
-import { edit, field as f } from "./forms.js?v=password-profile-20260917";
+import { api, notice } from "./api.js?v=global-loading-20260930";
+import { edit, field as f } from "./forms.js?v=global-loading-20260930";
 export function action(s, key, id, refresh, context = {}) {
   const opts = (values) =>
     values.map((v) => ({ id: v, name: v.replaceAll("_", " ") }));
@@ -602,7 +602,7 @@ export function action(s, key, id, refresh, context = {}) {
       ],
       async (data) => {
         await api("", "PATCH", { ...data, currency: data.currency.toUpperCase() });
-        location.reload();
+        window.ClassaritLoading?.reload("workspace") || location.reload();
       },
     );
 
@@ -615,7 +615,7 @@ export function action(s, key, id, refresh, context = {}) {
       ],
       async (data) => {
         await api("", "DELETE", data);
-        location.href = "/dashboard?overview=1";
+        window.ClassaritLoading?.navigate("/dashboard?overview=1", "dashboard") || (location.href = "/dashboard?overview=1");
       },
       { submitLabel: "Delete workspace", progressLabel: "Deleting…", danger: true },
     );

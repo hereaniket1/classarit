@@ -10,7 +10,7 @@ function saveOverlay() {
     overlay.hidden = true;
     overlay.setAttribute("role", "status");
     overlay.setAttribute("aria-live", "polite");
-    overlay.innerHTML = `<div class="save-overlay-panel skeleton-save">${window.ClassaritLoading?.panel("changes", 4) || '<p role="status">Saving changes…</p>'}</div>`;
+    overlay.innerHTML = `<div class="save-overlay-panel">${window.ClassaritLoading?.operation("Saving changes") || '<p role="status">Saving changes…</p>'}</div>`;
     document.body.append(overlay);
   }
   return overlay;
@@ -61,7 +61,7 @@ async function send(path, method, data) {
   }
   if (!response.ok) {
     if (response.status === 401) {
-      location.href = "/login";
+      window.ClassaritLoading?.navigate("/login", "login") || (location.href = "/login");
     }
     throw new Error(
       Array.isArray(result.detail)

@@ -124,7 +124,7 @@ document.addEventListener("change", async (event) => {
   const input = event.target.closest("[data-setting]");
   if (!input) return;
   input.disabled = true;
-  loading?.begin(settingsCard, "product controls", { rows: 3 });
+  loading?.busy(settingsCard, "Updating product controls");
   try {
     const payload = { [input.dataset.setting]: input.checked };
     const result = await api("/api/executive/settings", {
@@ -158,7 +158,7 @@ flushForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = flushForm.querySelector("button");
   button.disabled = true;
-  loading?.begin(flushForm, "data reset", { rows: 3 });
+  loading?.busy(flushForm, "Resetting data");
   try {
     await api("/api/executive/flush-data", {
       method: "POST",
@@ -172,7 +172,7 @@ flushForm?.addEventListener("submit", async (event) => {
     });
     show("Data deleted. Please sign in again.");
     window.setTimeout(() => {
-      location.href = "/login";
+      loading?.navigate("/login", "login") || (location.href = "/login");
     }, 800);
   } catch (error) {
     show(error.message, true);
@@ -193,7 +193,7 @@ deleteTermsForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = deleteTermsForm.querySelector("button");
   button.disabled = true;
-  loading?.begin(deleteTermsForm, "terms audit deletion", { rows: 2 });
+  loading?.busy(deleteTermsForm, "Deleting terms audit records");
   try {
     const result = await api("/api/executive/terms-acceptances", {
       method: "DELETE",
@@ -218,7 +218,7 @@ deleteTermsForm?.addEventListener("submit", async (event) => {
 document.querySelector("#logout")?.addEventListener("click", async () => {
   const form = new URLSearchParams({ csrf_token: csrf });
   const response = await fetch("/auth/logout", { method: "POST", body: form });
-  if (response.ok) location.href = "/";
+  if (response.ok) loading?.navigate("/", "home") || (location.href = "/");
   else show("Could not log out.", true);
 });
 

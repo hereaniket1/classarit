@@ -1,4 +1,4 @@
-import { esc, withSaving } from "./api.js?v=password-profile-20260917";
+import { esc, withSaving } from "./api.js?v=global-loading-20260930";
 const dialog = document.querySelector("#editor"),
   form = document.querySelector("#editor-form");
 function editorLoader() {
@@ -8,7 +8,7 @@ function editorLoader() {
     loader.className = "editor-save-loader";
     loader.setAttribute("role", "status");
     loader.setAttribute("aria-live", "polite");
-    loader.innerHTML = window.ClassaritLoading?.panel("form changes", 5) ||
+    loader.innerHTML = window.ClassaritLoading?.operation("Saving form changes") ||
       '<p role="status">Saving changes…</p>';
     dialog.append(loader);
   }

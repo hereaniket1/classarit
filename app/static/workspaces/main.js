@@ -4,10 +4,10 @@ import {
   setCalendarLoading,
   setCalendarMonthData,
   updateCalendarView,
-} from "./calendar.js?v=password-profile-20260917";
-import { api, clearNotice, request, notice, workspaceId } from "./api.js?v=password-profile-20260917";
-import { render } from "./render.js?v=password-profile-20260917";
-import { action } from "./actions.js?v=password-profile-20260917";
+} from "./calendar.js?v=global-loading-20260930";
+import { api, clearNotice, request, notice, workspaceId } from "./api.js?v=global-loading-20260930";
+import { render } from "./render.js?v=global-loading-20260930";
+import { action } from "./actions.js?v=global-loading-20260930";
 let snapshot,
   loadVersion = 0,
   tab = document.body.dataset.teacherOnly === "true" ? "classes" : "calendar",
@@ -133,7 +133,7 @@ document.querySelector("#logout").onclick = async () => {
       }),
     });
     if (!response.ok) throw new Error("Could not log out. Please retry.");
-    location.href = "/";
+    window.ClassaritLoading?.navigate("/", "home") || (location.href = "/");
   } catch (e) {
     notice(e.message, true);
   }
@@ -141,7 +141,7 @@ document.querySelector("#logout").onclick = async () => {
 function openWorkspace(value) {
   if (!value || value === workspaceId || switchingWorkspace) return;
   switchingWorkspace = true;
-  window.location.assign(`/workspaces/${encodeURIComponent(value)}`);
+  window.ClassaritLoading?.navigate(`/workspaces/${encodeURIComponent(value)}`, "workspace") || window.location.assign(`/workspaces/${encodeURIComponent(value)}`);
 }
 function syncBusinessProfileFields(form) {
   if (!form) return;
@@ -192,7 +192,7 @@ document
         "POST",
         data,
       );
-      location.href = `/workspaces/${row.id}`;
+      window.ClassaritLoading?.navigate(`/workspaces/${row.id}`, "workspace") || (location.href = `/workspaces/${row.id}`);
     } catch (e) {
       notice(e.message, true);
     } finally {
@@ -207,7 +207,7 @@ document
         `/api/invitations/${encodeURIComponent(document.body.dataset.invitation)}/accept`,
         "POST",
       );
-      location.href = `/workspaces/${row.workspace_id}`;
+      window.ClassaritLoading?.navigate(`/workspaces/${row.workspace_id}`, "workspace") || (location.href = `/workspaces/${row.workspace_id}`);
     } catch (e) {
       notice(e.message, true);
     }
@@ -217,7 +217,7 @@ document
   ?.addEventListener("click", async () => {
     try {
       await request("/api/invitations/dismiss", "POST");
-      location.href = "/dashboard";
+      window.ClassaritLoading?.navigate("/dashboard", "dashboard") || (location.href = "/dashboard");
     } catch (e) {
       notice(e.message, true);
     }

@@ -18,7 +18,7 @@
   });
   const signupPanel = document.getElementById('signup-panel');
   const showInvitation = () => {
-    if (!invitationForm) { window.location.href = '/login#invitation'; return; }
+    if (!invitationForm) { window.ClassaritLoading?.navigate('/login#invitation', 'invitation form') || window.location.assign('/login#invitation'); return; }
     if (signupPanel) signupPanel.hidden = true;
     invitationPanel.hidden = false;
     invitationPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -78,7 +78,7 @@
     if (event.key === 'Escape' && !termsPopup?.hidden) closeTerms();
   });
   const showSignup = () => {
-    if (!signupPanel) { window.location.href = '/login#signup'; return; }
+    if (!signupPanel) { loading?.navigate('/login#signup', 'signup form') || window.location.assign('/login#signup'); return; }
     if (invitationPanel) invitationPanel.hidden = true;
     signupPanel.hidden = false;
     signupPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -102,13 +102,13 @@
   loginForm?.addEventListener('submit', async event => {
     event.preventDefault();
     loginFormStatus.textContent = '';
-    loading?.begin(loginCard, 'login', { rows: 3 });
+    loading?.lockPage('Signing in');
     try {
       await json('/auth/password/login', Object.fromEntries(new FormData(loginForm)));
-      window.location.assign('/dashboard');
+      loading?.navigate('/dashboard', 'dashboard') || window.location.assign('/dashboard');
     } catch (error) {
       loginFormStatus.textContent = error.message;
-      loading?.end(loginCard);
+      loading?.unlockPage();
     }
   });
   startForm?.addEventListener('submit', async event => {
@@ -116,13 +116,16 @@
     signupStatus.textContent = 'Creating your account…';
     const button = startForm.querySelector('button');
     button.disabled = true;
-    loading?.begin(signupPanel, 'registration email', { rows: 3 });
+    let leaving = false;
+    let focusVerification = false;
+    loading?.lockPage('Creating your account');
     try {
       const payload = Object.fromEntries(new FormData(startForm));
       payload.accepted_terms = payload.accepted_terms === 'true';
       const result = await json('/auth/password/register', payload);
       if (!result.verification_required) {
-        window.location.assign('/dashboard');
+        leaving = true;
+        loading?.navigate('/dashboard', 'dashboard') || window.location.assign('/dashboard');
         return;
       }
       verifyForm.elements.challenge_id.value = result.challenge_id;
@@ -130,12 +133,13 @@
       startForm.hidden = true;
       verifyForm.hidden = false;
       signupStatus.textContent = '';
-      verifyForm.elements.code.focus();
+      focusVerification = true;
     } catch (error) {
       signupStatus.textContent = error.message;
     } finally {
       button.disabled = false;
-      loading?.end(signupPanel);
+      if (!leaving) loading?.unlockPage();
+      if (focusVerification) verifyForm.elements.code.focus();
     }
   });
   verifyForm?.addEventListener('submit', async event => {
@@ -143,15 +147,17 @@
     signupStatus.textContent = 'Verifying…';
     const button = verifyForm.querySelector('button');
     button.disabled = true;
-    loading?.begin(signupPanel, 'account verification', { rows: 3 });
+    let leaving = false;
+    loading?.lockPage('Verifying your account');
     try {
       await json('/auth/password/register/verify', Object.fromEntries(new FormData(verifyForm)));
-      window.location.assign('/dashboard');
+      leaving = true;
+      loading?.navigate('/dashboard', 'dashboard') || window.location.assign('/dashboard');
     } catch (error) {
       signupStatus.textContent = error.message;
       button.disabled = false;
     } finally {
-      loading?.end(signupPanel);
+      if (!leaving) loading?.unlockPage();
     }
   });
 
@@ -172,7 +178,7 @@
       window.opener.postMessage({ type: 'classarit:login-complete' }, window.location.origin);
       window.close();
     } else {
-      loginDestination().then(url => window.location.replace(url));
+      loginDestination().then(url => loading?.replace(url, 'dashboard') || window.location.replace(url));
     }
   }
 
@@ -198,7 +204,7 @@
         const payload = await response.json();
         if (payload.authenticated) {
           stop();
-          window.location.assign(payload.next_url || '/dashboard');
+          loading?.navigate(payload.next_url || '/dashboard', 'dashboard') || window.location.assign(payload.next_url || '/dashboard');
           return;
         }
       }

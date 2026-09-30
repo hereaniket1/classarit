@@ -1,6 +1,6 @@
 /** Month calendar uses workspace-local dates and API-loaded monthly sessions. */
-import { esc } from "./api.js?v=password-profile-20260917";
-import { icon } from "./icons.js?v=password-profile-20260917";
+import { esc } from "./api.js?v=global-loading-20260930";
+import { icon } from "./icons.js?v=global-loading-20260930";
 
 const INLINE_SLOT_LIMIT = 2;
 const calendarState = { monthKey: "", monthData: null, loading: false };

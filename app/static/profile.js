@@ -25,7 +25,7 @@ async function api(path, method, data) {
 document.querySelector("#profile-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const card = document.querySelector("#profile-details-card");
-  loading?.begin(card, "profile details", { rows: 4 });
+  loading?.busy(card, "Saving profile details");
   try {
     const payload = Object.fromEntries(new FormData(event.currentTarget));
     if (!payload.date_of_birth) payload.date_of_birth = null;
@@ -41,7 +41,7 @@ document.querySelector("#profile-form")?.addEventListener("submit", async (event
 
 document.querySelector("#send-profile-otp")?.addEventListener("click", async (event) => {
   const card = document.querySelector("#email-verification-card");
-  loading?.begin(card, "verification email", { rows: 3 });
+  loading?.busy(card, "Sending verification email");
   try {
     const result = await api("/auth/email/verify/start", "POST");
     const form = document.querySelector("#profile-otp-form");
@@ -60,10 +60,10 @@ document.querySelector("#send-profile-otp")?.addEventListener("click", async (ev
 document.querySelector("#profile-otp-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const card = document.querySelector("#email-verification-card");
-  loading?.begin(card, "email verification", { rows: 3 });
+  loading?.busy(card, "Verifying email");
   try {
     await api("/auth/email/verify/complete", "POST", Object.fromEntries(new FormData(event.currentTarget)));
-    window.location.reload();
+    loading?.reload("profile") || window.location.reload();
   } catch (error) {
     show(error.message, true);
     loading?.end(card);
@@ -75,6 +75,6 @@ document.querySelector("#logout")?.addEventListener("click", async () => {
     method: "POST",
     body: new URLSearchParams({ csrf_token: csrf }),
   });
-  if (response.ok) window.location.href = "/";
+  if (response.ok) loading?.navigate("/", "home") || window.location.assign("/");
   else show("Could not log out. Please retry.", true);
 });

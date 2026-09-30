@@ -7,7 +7,7 @@ export async function logout() {
     }),
   });
   if (!response.ok) throw new Error("Could not log out. Please retry.");
-  location.href = "/";
+  window.ClassaritLoading?.navigate("/", "home") || (location.href = "/");
 }
 document.querySelector("#logout")?.addEventListener("click", async () => {
   try {
@@ -44,7 +44,7 @@ document.addEventListener("click", async (event) => {
   const original = label ? label.textContent : button.textContent;
   button.disabled = true;
   if (label) label.textContent = "Saving…";
-  loading?.begin(card, "workspace preference", { rows: 3 });
+  loading?.busy(card, "Saving workspace preference");
   try {
     const selected = await setDefaultWorkspace(button.dataset.defaultWorkspace);
     document.querySelectorAll("[data-default-workspace]").forEach((item) => {

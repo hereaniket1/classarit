@@ -21,9 +21,10 @@ try {
     if(url.hostname!=='classarit.test') { await route.abort(); return; }
     const payload=route.request().postDataJSON();
     const json=body=>route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
-    if(url.pathname.startsWith('/api/') || url.pathname==='/auth/invitation-requests') {
+    if(url.pathname.startsWith('/api/') || url.pathname==='/auth/invitation-requests' || url.pathname==='/auth/password/login') {
       requests.push({url:url.pathname,method:route.request().method(),payload});
-      if(url.pathname==='/auth/invitation-requests') return json({ok:true,message:'Your request has been received.'});
+      if(url.pathname==='/auth/invitation-requests') { await new Promise(resolve=>setTimeout(resolve,180)); return json({ok:true,message:'Your request has been received.'}); }
+      if(url.pathname==='/auth/password/login') { await new Promise(resolve=>setTimeout(resolve,220)); return route.fulfill({status:401,contentType:'application/json',body:JSON.stringify({detail:'Login check failed.'})}); }
       if(url.pathname==='/api/executive/dashboard') return json({settings:{invite_request_enabled:invitationMode},registrations:{},api:{}});
       if(url.pathname==='/api/executive/settings') { invitationMode=payload.invite_request_enabled; return json({settings:{invite_request_enabled:invitationMode}}); }
       if(url.pathname==='/api/executive/terms') return json({title:'Review terms',body:'Review text'});
@@ -58,8 +59,23 @@ try {
   await form.locator('[name=email]').fill('review@example.com');
   await form.locator('[name=usage_type]').selectOption('ORGANIZATION');
   await form.locator('button').click();
+  assert.equal(await form.locator('button .action-spinner').count(),1);
   await page.waitForFunction(()=>document.querySelector('#invitation-request-status').textContent.includes('received'));
   assert.equal(requests.find(r=>r.url==='/auth/invitation-requests').payload.usage_type,'ORGANIZATION');
+  await page.goto('http://classarit.test/login');
+  await page.locator('#password-login-form [name=email]').fill('review@example.com');
+  await page.locator('#password-login-form [name=password]').fill('incorrect-password');
+  await page.locator('#password-login-form button[type=submit]').click();
+  await page.locator('.global-page-loader.is-operation-lock').waitFor();
+  assert.equal(await page.locator('.public-header').evaluate(element=>element.inert),true);
+  await page.screenshot({path:path.join(fixtures,'loading-auth-lock.png'),fullPage:true});
+  await page.waitForFunction(()=>document.querySelector('#password-login-status').textContent.includes('failed'));
+  assert.equal(await page.locator('.global-page-loader').count(),0);
+  assert.equal(await page.locator('.public-header').evaluate(element=>element.inert),false);
+  await page.evaluate(()=>window.ClassaritLoading.transition('review page'));
+  assert.equal(await page.locator('.global-page-loader.is-page-transition .skeleton-page').count(),1);
+  await page.screenshot({path:path.join(fixtures,'loading-page-transition.png'),fullPage:true});
+  await page.evaluate(()=>window.ClassaritLoading.unlockPage());
   await page.goto('http://classarit.test/executive');
   console.log('Request form passed; checking executive actions');
   await page.getByRole('button',{name:'Approve',exact:true}).click();
@@ -87,6 +103,8 @@ try {
   assert.equal(await page.locator('#signup-panel').isVisible(),true);
   assert.equal(await page.locator('#signup-start-form [name=account_type]').getAttribute('required'),'');
   assert.equal(await page.locator('#signup-start-form [name=account_type] option').count(),3);
+  await page.locator('#signup-start-form [name=accepted_terms]').check();
+  assert.equal(await page.locator('#signup-start-form .control-action-spinner').count(),1);
   await page.goto('http://classarit.test/google-profile');
   assert.equal(await page.locator('#google-profile-form [name=account_type]').getAttribute('required'),'');
   assert.deepEqual(errors,[]);

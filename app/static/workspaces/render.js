@@ -1,6 +1,6 @@
-import { esc } from "./api.js?v=password-profile-20260917";
-import { icon } from "./icons.js?v=password-profile-20260917";
-import { renderCalendar } from "./calendar.js?v=password-profile-20260917";
+import { esc } from "./api.js?v=global-loading-20260930";
+import { icon } from "./icons.js?v=global-loading-20260930";
+import { renderCalendar } from "./calendar.js?v=global-loading-20260930";
 export const button = (label, action, id = "", kind = "outline-primary") =>
   `<button type="button" class="btn btn-sm btn-${kind} action-icon" title="${esc(label)}" aria-label="${esc(label)}" data-action="${action}" data-id="${esc(id)}">${icon(action)}</button>`;
 const labeledButton = (label, action, id = "", kind = "outline-primary") =>
