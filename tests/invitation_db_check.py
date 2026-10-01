@@ -34,12 +34,18 @@ def check():
                                     {'email':'aniketpathak1@gmail.com'}).scalar_one()
             email = f'invitation-test-{uuid4().hex}@example.com'
             payload = InterestInput(full_name='Invitation integration test', email=email, country='IN', usage_type='INDIVIDUAL')
-            with patch.object(admissions, 'auth_engine', return_value=RollbackEngine()), patch.object(admissions, 'setting_enabled', return_value=True), patch.object(admissions, 'send_email', return_value={'id':'mock-provider-accepted'}) as mail, patch.object(repository, 'generate_otp', return_value='123456'):
+            with patch.object(admissions, 'auth_engine', return_value=RollbackEngine()), patch.object(repository, 'auth_engine', return_value=RollbackEngine()), patch.object(repository, 'setting_enabled', side_effect=lambda key, default: key == 'invite_request_enabled'), patch.object(admissions, 'setting_enabled', return_value=True), patch.object(admissions, 'send_email', return_value={'id':'mock-provider-accepted'}) as mail, patch.object(repository, 'generate_otp', return_value='123456'):
+                claims = {'sub':uuid4().hex, 'email':email, 'email_verified':True, 'name':'Invitation test'}
                 response = admissions.request_invitation(payload, 'https://classarit.test')
                 challenge = UUID(response['challenge_id'])
                 row = conn.execute(text(f'SELECT * FROM {schema}.interest WHERE verification_id=:id'), {'id':challenge}).mappings().one()
                 assert mail.call_count == 2  # Applicant OTP and owner review links.
                 assert row['email_verified_at'] is None
+                try:
+                    repository.google_account(claims)
+                    raise AssertionError('Unverified Google signup accepted')
+                except repository.AccountUnavailable:
+                    pass
                 try:
                     admissions.review_request(row['id'], 'APPROVED', reviewer, 'https://classarit.test/login#signup')
                     raise AssertionError('Unverified request was approved')
@@ -54,12 +60,22 @@ def check():
                 admissions.verify_request(challenge, '123456', 'https://classarit.test')
                 admissions.verify_request(challenge, '123456', 'https://classarit.test')
                 assert mail.call_count == 3  # Only one receipt, including replay.
+                assert 'Continue with Google' in mail.call_args.args[2]
+                try:
+                    repository.google_account(claims)
+                    raise AssertionError('Unapproved Google signup accepted')
+                except repository.AccountUnavailable:
+                    pass
                 approved = admissions.review_request(row['id'], 'APPROVED', reviewer, 'https://classarit.test/login#signup')
                 assert approved['email_sent'] and mail.call_count == 4
                 assert admissions.admission_type(conn, email) == 'INDIVIDUAL'
                 assert admissions.list_requests('APPROVED', request_id=row['id'])['requests'][0]['email_verified_at']
                 assert conn.execute(text(f'SELECT count(*) FROM {schema}.user_emails WHERE email=:email'), {'email':email}).scalar_one() == 0
-            print('Passed: real DB request, verification, review, admission and delivery markers. All email mocked; test data rolled back.')
+                new_user = repository.google_account(claims)
+                assert new_user['is_new_user']
+                assert conn.execute(text(f'SELECT account_type FROM {schema}.app_users WHERE id=:id'), {'id':UUID(new_user['id'])}).scalar_one() == 'INDIVIDUAL'
+                assert not repository.google_account(claims)['is_new_user']
+            print('Passed: real DB request, OTP, approval, Google account creation and repeat login, account type and delivery markers. All email mocked; test data rolled back.')
         finally:
             transaction.rollback()
 

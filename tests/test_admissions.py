@@ -189,9 +189,11 @@ class AdmissionTests(unittest.TestCase):
                'verification_digest':repository.challenge_digest(challenge, 'INVITATION_REQUEST_OTP', 'a@example.com', '123456'),
                'receipt_sent_at':None, 'full_name':'<Applicant>', 'status':'PENDING'}
         self.conn.execute.return_value = result(row)
-        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, '_deliver') as deliver, patch.object(admissions, '_notify_owner'):
+        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, '_deliver') as deliver, patch.object(admissions, '_notify_owner', side_effect=HTTPException(502, 'Retry owner delivery')):
             self.assertTrue(admissions.verify_request(challenge, '123456', 'https://classarit.test')['ok'])
             self.assertIn('&lt;Applicant&gt;', deliver.call_args.args[2])
+            self.assertIn('Continue with Google', deliver.call_args.args[2])
+            self.assertNotIn('Request ID', deliver.call_args.args[2])
             row['receipt_sent_at'] = 'already sent'
             admissions.verify_request(challenge, '123456', 'https://classarit.test')
             deliver.assert_called_once()
@@ -256,7 +258,7 @@ class AdmissionTests(unittest.TestCase):
             ]:
                 with self.subTest(method=method.__name__), self.assertRaises(repository.AccountUnavailable):
                     method(*args)
-            self.assertEqual(gate.call_count, 2)  # Google creation is blocked before admission lookup.
+            self.assertEqual(gate.call_count, 3)
         self.assertFalse(any('INSERT' in str(c.args[0]) for c in self.conn.execute.call_args_list))
 
     def test_existing_google_account_does_not_require_new_approval(self):
@@ -266,14 +268,30 @@ class AdmissionTests(unittest.TestCase):
         self.assertFalse(row['is_new_user'])
         gate.assert_not_called()
 
-    def test_invitation_mode_blocks_new_google_even_if_approved(self):
+    def test_approved_verified_invitation_allows_new_google_despite_open_signup_toggle(self):
         self.conn.execute.return_value = result(None)
-        with patch.object(repository, 'auth_engine', return_value=self.engine), patch.object(repository, 'setting_enabled', return_value=True), patch.object(repository, 'admission_type', return_value='INDIVIDUAL') as gate:
-            with self.assertRaises(repository.AccountUnavailable) as error:
-                repository.google_account({'sub':'new', 'email':'new@example.com', 'email_verified':True})
-        self.assertIn('Invitation-only', str(error.exception))
-        gate.assert_not_called()
-        self.assertEqual(self.conn.execute.call_count, 2)
+        with patch.object(repository, 'auth_engine', return_value=self.engine), patch.object(repository, 'setting_enabled', side_effect=lambda key, default: key == 'invite_request_enabled'), patch.object(repository, 'admission_type', return_value='INDIVIDUAL') as gate, patch.object(repository, '_link_verified_contacts'):
+            response = repository.google_account({'sub':'new', 'email':'new@example.com', 'email_verified':True})
+        self.assertTrue(response['is_new_user'])
+        gate.assert_called_once_with(self.conn, 'new@example.com', None)
+        saved = [call.args[1] for call in self.conn.execute.call_args_list if 'SET account_type=' in str(call.args[0])]
+        self.assertEqual(saved[0]['kind'], 'INDIVIDUAL')
+
+    def test_owner_retry_processes_other_requests_after_provider_failure(self):
+        first, second = uuid4(), uuid4()
+        self.conn.execute.return_value.mappings.return_value.all.return_value = [
+            {'id':first, 'notification_base_url':'https://classarit.test'},
+            {'id':second, 'notification_base_url':'https://classarit.test'}]
+        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, '_notify_owner', side_effect=[HTTPException(502,'Retry'), None]) as notify:
+            admissions.retry_owner_notifications()
+        self.assertEqual(notify.call_count, 2)
+
+    def test_approval_email_ignores_operational_toggle_and_invites_google_login(self):
+        self.conn.execute.return_value = result({'status':'APPROVED', 'email':'a@example.com', 'full_name':'A', 'recently_sent':False})
+        with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, 'setting_enabled', return_value=False), patch.object(admissions, 'send_email', return_value={'id':'accepted'}) as send:
+            admissions.email_approval(uuid4(), 'https://classarit.test/login#signup')
+        self.assertIn('Continue with Google', send.call_args.args[2])
+        self.assertNotIn('#signup', send.call_args.args[2])
 
     def test_existing_verified_password_user_can_link_google_in_invitation_mode(self):
         self.conn.execute.side_effect = [result(None), result({'app_user_id':uuid4(), 'verified_at':True, 'status':'ACTIVE'}), result(None), result(None), result(None)]

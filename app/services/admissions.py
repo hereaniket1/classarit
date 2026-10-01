@@ -49,17 +49,46 @@ def _deliver(to, subject, body):
         raise HTTPException(503, 'Email delivery is unavailable. Please retry.')
 
 
-def _details(row):
-    return ''.join(f'<p><strong>{label}:</strong> {escape(str(row.get(key) or "Not supplied"))}</p>'
-        for label, key in [('Name','full_name'), ('Email','email'), ('Country','country'),
-                           ('Account type','usage_type'), ('Request ID','id'), ('Requested at','requested_at')])
+def _details(row, internal=True):
+    details = dict(row)
+    details['usage_type'] = {'INDIVIDUAL':'Individual', 'ORGANIZATION':'Organization'}.get(row.get('usage_type'), 'Not selected')
+    when = row.get('requested_at')
+    if hasattr(when, 'strftime'):
+        details['requested_at'] = when.strftime('%d %b %Y, %H:%M %Z')
+    fields = [('Name','full_name'), ('Email','email'), ('Country','country'), ('Account type','usage_type'), ('Requested on','requested_at')]
+    if internal:
+        fields.append(('Request ID','id'))
+    return '<table style="border-collapse:collapse;width:100%;max-width:560px">' + ''.join(
+        f'<tr><th style="text-align:left;padding:10px;border-bottom:1px solid #e5e7eb">{label}</th>'
+        f'<td style="padding:10px;border-bottom:1px solid #e5e7eb">{escape(str(details.get(key) or "Not supplied"))}</td></tr>'
+        for label, key in fields) + '</table>'
+
+
+def retry_owner_notifications():
+    """Pending deliveries survive restarts; row locking prevents concurrent sends."""
+    with auth_engine().connect() as conn:
+        pending = conn.execute(text(f'''SELECT id,notification_base_url FROM {schema_name()}.interest
+            WHERE owner_notified_at IS NULL AND notification_base_url IS NOT NULL
+            ORDER BY requested_at LIMIT 50''')).mappings().all()
+    for row in pending:
+        try:
+            _notify_owner(row['id'], row['notification_base_url'])
+        except HTTPException:
+            continue
+
+
+def queue_owner_notifications(base_url):
+    """Include older requests whose owner notification never succeeded."""
+    with auth_engine().begin() as conn:
+        conn.execute(text(f'''UPDATE {schema_name()}.interest SET notification_base_url=:url
+            WHERE owner_notified_at IS NULL AND notification_base_url IS NULL'''), {'url':base_url})
 
 
 def _notify_owner(request_id, base_url):
     with auth_engine().begin() as conn:
         row = conn.execute(text(f'SELECT * FROM {schema_name()}.interest WHERE id=:id FOR UPDATE'),
                            {'id': request_id}).mappings().first()
-        if row['owner_notified_at']:
+        if not row or row['owner_notified_at']:
             return
         link = escape(base_url.rstrip('/') + '/invitation-review/' + str(row['id']), quote=True)
         _deliver('aniketpathak1@gmail.com', 'New Classarit access request',
@@ -97,8 +126,8 @@ def request_invitation(payload, base_url=''):
         request_id, challenge_id, code = row['id'], uuid4(), generate_otp()
         conn.execute(text(f"""UPDATE {schema_name()}.interest SET verification_id=:challenge,
             verification_digest=:digest,verification_expires_at=CURRENT_TIMESTAMP+interval '10 minutes',
-            verification_attempts=0,verification_sent_at=CURRENT_TIMESTAMP WHERE id=:id"""),
-            {'id':request_id,'challenge':challenge_id,'digest':challenge_digest(challenge_id,'INVITATION_REQUEST_OTP',email,code)})
+            verification_attempts=0,verification_sent_at=CURRENT_TIMESTAMP,notification_base_url=:base_url WHERE id=:id"""),
+            {'id':request_id,'challenge':challenge_id,'base_url':base_url,'digest':challenge_digest(challenge_id,'INVITATION_REQUEST_OTP',email,code)})
         _deliver(email, 'Verify your Classarit access request',
                  f'<h2>Verify your email</h2><p>Your access-request verification code is <strong>{code}</strong>.</p>'
                  '<p>Expires in 10 minutes. This verifies an invitation request only; it does not create an account or grant access.</p>')
@@ -129,13 +158,22 @@ def verify_request(challenge_id, code, base_url):
     if invalid:
         raise HTTPException(400, 'Incorrect verification code.')
     # Verification stays committed even if delivery fails; the same code can retry delivery until expiry.
-    _notify_owner(row['id'], base_url)
+    try:
+        _notify_owner(row['id'], base_url)
+    except HTTPException:
+        pass  # The durable pending notification is retried by the application worker.
     with auth_engine().begin() as conn:
         current = conn.execute(text(f'SELECT * FROM {schema_name()}.interest WHERE id=:id FOR UPDATE'), {'id':row['id']}).mappings().first()
         if not current['receipt_sent_at']:
+            login_url = escape(base_url.rstrip('/') + '/login', quote=True)
+            next_step = ('Your access is approved. You can log in now.' if current['status'] == 'APPROVED' else
+                         'Your request was declined. Access is not enabled.' if current['status'] == 'REJECTED' else
+                         'Your email is verified and your request is awaiting approval. We will email you when access is granted.')
             _deliver(str(current['email']), 'Your Classarit access request is verified',
-                     '<h2>Email verified</h2><p>Your access request has been recorded. This is not account signup.</p>' +
-                     f'<p>Current status: {escape(current["status"])}</p>' + _details(current))
+                     f'<h2>Thank you, {escape(current["full_name"])}</h2><p>{next_step}</p>' +
+                     _details(current, internal=False) +
+                     f'<p>Once approved, open <a href="{login_url}">Classarit login</a> and choose <strong>Continue with Google</strong>. '
+                     f'Use your verified Google account for <strong>{escape(str(current["email"]))}</strong>. No separate password signup is needed.</p>')
             conn.execute(text(f'UPDATE {schema_name()}.interest SET receipt_sent_at=CURRENT_TIMESTAMP WHERE id=:id'), {'id':row['id']})
     return {'ok':True,'message':'Email verified. Your request details have been emailed to you. We will email you when access is granted.'}
 
@@ -170,8 +208,8 @@ def review_request(request_id, status, reviewer, signup_url=None):
 
 def email_approval(request_id, signup_url):
     """Send after approval or explicit executive retry; record provider acceptance."""
-    if not setting_enabled('notification_emails_enabled', True):
-        raise HTTPException(409, 'Enable operational emails before sending an invitation.')
+    # Access decisions are transactional emails, independent of schedule notifications.
+    signup_url = signup_url.split('#', 1)[0]
     with auth_engine().begin() as conn:
         row = conn.execute(text(f"""SELECT email,full_name,status,last_email_sent_at,
             last_email_sent_at > CURRENT_TIMESTAMP - interval '1 minute' AS recently_sent
@@ -183,8 +221,9 @@ def email_approval(request_id, signup_url):
         try:
             result = send_email(str(row['email']), 'Your Classarit invitation is ready',
                 f'<h2>Welcome to Classarit</h2><p>Hi {escape(row["full_name"])}, your request is approved.</p>'
-                f'<p><a href="{escape(signup_url, quote=True)}">Create your account</a> using this email address.</p>',
-                f'Your Classarit request is approved. Create your account using this email address: {signup_url}')
+                f'<p><a href="{escape(signup_url, quote=True)}">Log in to Classarit</a> and choose <strong>Continue with Google</strong> '
+                f'using <strong>{escape(str(row["email"]))}</strong>. No separate password signup is needed.</p>',
+                f'Your Classarit request is approved. Log in with Google using {row["email"]}: {signup_url}')
         except Exception:
             raise HTTPException(502, 'The email provider could not send the invitation. Approval is saved; try again.') from None
         if not result or not result.get('id'):

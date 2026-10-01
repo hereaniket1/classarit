@@ -2,6 +2,8 @@
 import asyncio
 import time
 from contextlib import asynccontextmanager
+from contextlib import suppress
+import logging
 
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
@@ -22,6 +24,7 @@ from .config import PROJECT_DIR, UPLOAD_DIR
 from .database import Base, engine, get_db
 from .services.ownership import upgrade_local_ownership, get_teacher
 from .services.telemetry import record_api_metric
+from .services.admissions import retry_owner_notifications
 from . import models
 
 
@@ -29,7 +32,20 @@ from . import models
 async def lifespan(app):
     Base.metadata.create_all(bind=engine)
     upgrade_local_ownership(engine)
-    yield
+    async def retry_invitation_emails():
+        while True:
+            try:
+                await asyncio.to_thread(retry_owner_notifications)
+            except Exception:
+                logging.getLogger(__name__).warning('Invitation notification retry unavailable; will retry shortly.')
+            await asyncio.sleep(60)
+    worker = asyncio.create_task(retry_invitation_emails())
+    try:
+        yield
+    finally:
+        worker.cancel()
+        with suppress(asyncio.CancelledError):
+            await worker
 
 
 settings = get_settings()

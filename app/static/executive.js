@@ -20,7 +20,7 @@ const labels = {
   ],
   google_new_accounts_enabled: [
     "Google new-account login",
-    "Allows new Google accounts only when invitation-only signup is off. Existing users can always log in with Google.",
+    "Controls open Google registration. In invitation mode, approved and email-verified applicants can join with Google. Existing users can still log in.",
   ],
   signup_enabled: [
     "New account signup",
@@ -32,7 +32,7 @@ const labels = {
   ],
   notification_emails_enabled: [
     "Operational emails",
-    "Invitation and schedule notification emails are sent only when this is on.",
+    "Controls schedule and operational notifications. Access-request, verification and approval emails are always sent.",
   ],
 };
 

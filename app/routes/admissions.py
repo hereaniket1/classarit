@@ -40,8 +40,9 @@ def verify_request(payload: InvitationVerifyInput, request: Request):
 
 
 @router.get('/api/executive/invitation-requests')
-def requests(status: Literal['PENDING', 'APPROVED', 'REJECTED', 'ALL']='PENDING',
+def requests(request: Request, status: Literal['PENDING', 'APPROVED', 'REJECTED', 'ALL']='PENDING',
              offset: int=Query(default=0, ge=0), request_id: UUID | None=None, user=Depends(require_executive)):
+    admissions.queue_owner_notifications(str(request.base_url))
     return admissions.list_requests(status, offset, request_id)
 
 
@@ -54,9 +55,9 @@ def review_link(request_id: UUID, decision: Literal['APPROVED', 'REJECTED'], req
 
 @router.patch('/api/executive/invitation-requests/{request_id}')
 def review(request_id: UUID, payload: ReviewInput, request: Request, user=Depends(require_executive)):
-    return admissions.review_request(request_id, payload.status, user['id'], str(request.url_for('login_page')) + '#signup')
+    return admissions.review_request(request_id, payload.status, user['id'], str(request.url_for('login_page')))
 
 
 @router.post('/api/executive/invitation-requests/{request_id}/email')
 def send_invitation(request_id: UUID, request: Request, user=Depends(require_executive)):
-    return admissions.email_approval(request_id, str(request.url_for('login_page')) + '#signup')
+    return admissions.email_approval(request_id, str(request.url_for('login_page')))

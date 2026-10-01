@@ -39,7 +39,7 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         # Match hosted installations where citext already lives in public.
         subprocess.run(cmd+['-c','CREATE EXTENSION citext WITH SCHEMA public'],check=True,stdout=subprocess.DEVNULL)
         subprocess.run(cmd+['-f',str(ROOT/'setup/auth_schema.sql')],check=True,stdout=subprocess.DEVNULL)
-        for migration in ('001_workspaces_and_teaching.sql','002_account_types_and_single_owner.sql','003_owner_staff_separation.sql','004_recurring_session_series.sql','005_workspace_type_role_policy.sql','006_direct_scheduled_participants.sql','007_default_workspace.sql','008_notifications_otp_executive.sql','009_exclusive_staff_roles.sql','010_password_login_and_profiles.sql','011_business_profiles_and_individual_limit.sql','012_terms_acceptance_audit.sql','013_google_profile_terms_events.sql','016_admissions_compatibility.sql','017_invitation_email_verification.sql'):
+        for migration in ('001_workspaces_and_teaching.sql','002_account_types_and_single_owner.sql','003_owner_staff_separation.sql','004_recurring_session_series.sql','005_workspace_type_role_policy.sql','006_direct_scheduled_participants.sql','007_default_workspace.sql','008_notifications_otp_executive.sql','009_exclusive_staff_roles.sql','010_password_login_and_profiles.sql','011_business_profiles_and_individual_limit.sql','012_terms_acceptance_audit.sql','013_google_profile_terms_events.sql','016_admissions_compatibility.sql','017_invitation_email_verification.sql','018_invitation_notification_retry.sql'):
             for _ in range(2):
                 subprocess.run([sys.executable,str(ROOT/'setup/apply_migration.py'),migration],check=True,stdout=subprocess.DEVNULL)
         from app.main import app
