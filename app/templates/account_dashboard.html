@@ -24,7 +24,7 @@
       <span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span>
       <span><strong>{{ user.full_name or 'My account' }}</strong><small>{{ display_role }}</small></span>
     </a>
-    <nav aria-label="Account navigation"><a class="account-nav active" href="/dashboard">My dashboard</a><a class="account-nav" href="/profile">Profile</a>{% if executive_access %}<a class="account-nav" href="/executive" target="_blank" rel="noopener" title="Open Executive dashboard in a new tab">Executive dashboard ↗</a>{% endif %}</nav>
+    <nav aria-label="Account navigation"><a class="account-nav active" href="/dashboard">My dashboard</a><a class="account-nav" href="/profile">Profile</a>{% if executive_access %}<a class="account-nav" href="/executive">Executive dashboard</a>{% endif %}</nav>
     <div class="workspace-footer"><button type="button" id="logout">Log out</button></div>
   </aside>
   <main class="workspace-main account-main">
