@@ -168,7 +168,7 @@ def verify_request(challenge_id, code, base_url):
                      f'<h2>Thank you, {escape(current["full_name"])}</h2><p>{next_step}</p>' +
                      _details(current, internal=False) +
                      f'<p>Once approved, open <a href="{login_url}">Classarit login</a> and choose <strong>Continue with Google</strong>. '
-                     f'Use your verified Google account for <strong>{escape(str(current["email"]))}</strong>. No separate password signup is needed.</p>')
+                     f'Use your verified Google account for <strong>{escape(str(current["email"]))}</strong>.</p>')
             conn.execute(text(f'UPDATE {schema_name()}.interest SET receipt_sent_at=CURRENT_TIMESTAMP WHERE id=:id'), {'id':row['id']})
     return {'ok':True,'message':'Email verified. Your request details have been emailed to you. We will email you when access is granted.'}
 
@@ -217,7 +217,7 @@ def email_approval(request_id, signup_url):
             result = send_email(str(row['email']), 'Your Classarit invitation is ready',
                 f'<h2>Welcome to Classarit</h2><p>Hi {escape(row["full_name"])}, your request is approved.</p>'
                 f'<p><a href="{escape(signup_url, quote=True)}">Log in to Classarit</a> and choose <strong>Continue with Google</strong> '
-                f'using <strong>{escape(str(row["email"]))}</strong>. No separate password signup is needed.</p>',
+                f'using <strong>{escape(str(row["email"]))}</strong>.</p>',
                 f'Your Classarit request is approved. Log in with Google using {row["email"]}: {signup_url}')
         except Exception:
             raise HTTPException(502, 'The email provider could not send the invitation. Approval is saved; try again.') from None
