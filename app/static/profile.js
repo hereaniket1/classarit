@@ -41,13 +41,14 @@ document.querySelector("#profile-form")?.addEventListener("submit", async (event
 
 document.querySelector("#send-profile-otp")?.addEventListener("click", async (event) => {
   const card = document.querySelector("#email-verification-card");
+  const button = event.currentTarget;
   loading?.busy(card, "Sending verification email");
   try {
     const result = await api("/auth/email/verify/start", "POST");
     const form = document.querySelector("#profile-otp-form");
     form.elements.challenge_id.value = result.challenge_id;
     form.hidden = false;
-    event.currentTarget.hidden = true;
+    button.hidden = true;
     show(`Verification code sent to ${result.email}.`);
     form.elements.code.focus();
   } catch (error) {
@@ -71,10 +72,12 @@ document.querySelector("#profile-otp-form")?.addEventListener("submit", async (e
 });
 
 document.querySelector("#logout")?.addEventListener("click", async () => {
-  const response = await fetch("/auth/logout", {
-    method: "POST",
-    body: new URLSearchParams({ csrf_token: csrf }),
-  });
-  if (response.ok) loading?.navigate("/", "home") || window.location.assign("/");
-  else show("Could not log out. Please retry.", true);
+  try {
+    const response = await fetch("/auth/logout", {
+      method: "POST",
+      body: new URLSearchParams({ csrf_token: csrf }),
+    });
+    if (response.ok) loading?.navigate("/", "home") || window.location.assign("/");
+    else show("Could not log out. Please retry.", true);
+  } catch (error) { show(error.message, true); }
 });

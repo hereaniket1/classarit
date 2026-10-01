@@ -194,10 +194,12 @@ resetDialog?.addEventListener('close', async () => {
 });
 
 document.querySelector("#logout")?.addEventListener("click", async () => {
-  const form = new URLSearchParams({ csrf_token: csrf });
-  const response = await fetch("/auth/logout", { method: "POST", body: form });
-  if (response.ok) loading?.navigate("/", "home") || (location.href = "/");
-  else show("Could not log out.", true);
+  try {
+    const form = new URLSearchParams({ csrf_token: csrf });
+    const response = await fetch("/auth/logout", { method: "POST", body: form });
+    if (response.ok) loading?.navigate("/", "home") || (location.href = "/");
+    else show("Could not log out.", true);
+  } catch (error) { show(error.message, true); }
 });
 
 load();

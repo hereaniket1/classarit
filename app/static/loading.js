@@ -79,6 +79,8 @@
   let activeControl = null;
   let activeControlTimer;
   let pageOverlay;
+  let pageTimer;
+  let pendingRequests = 0;
 
   const interactive =
     'button,a[href],input[type="button"],input[type="submit"],input[type="radio"],input[type="checkbox"],select,[role="button"],[data-action],[data-tab]';
@@ -119,6 +121,7 @@
     state.depth = Math.max(0, state.depth - 1);
     if (state.depth) return;
     const clear = () => {
+      if (actionStates.get(control) !== state || state.depth > 0) return;
       state.host.querySelectorAll(":scope > [data-action-spinner],:scope > [data-action-announcement]").forEach((item) => item.remove());
       state.host.classList.remove("action-is-loading");
       control.removeAttribute("aria-busy");
@@ -149,13 +152,48 @@
   }
 
   const nativeFetch = window.fetch.bind(window);
-  window.fetch = (...args) => {
+  window.fetch = async (input, init = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input, location.href);
+    const managed = url.origin === location.origin && /^\/(api|auth)\//.test(url.pathname);
+    if (!managed) return nativeFetch(input, init);
     const focused = document.activeElement?.closest?.(interactive);
-    const control = activeControl || (focused && !focused.matches(":disabled") ? focused : null);
-    if (control) actionBegin(control, "Loading");
-    return nativeFetch(...args).finally(() => {
+    const control = activeControl || (focused && !focused.matches(':disabled') ? focused : null);
+    if (control) actionBegin(control, 'Loading');
+    const controller = new AbortController();
+    const signal = init.signal || (input instanceof Request ? input.signal : null);
+    const abort = () => controller.abort(signal.reason);
+    if (signal?.aborted) abort();
+    else signal?.addEventListener('abort', abort, {once:true});
+    let timedOut = false;
+    const timer = window.setTimeout(() => { timedOut = true; controller.abort(); }, 45000);
+    pendingRequests += 1;
+    try {
+      const response = await nativeFetch(input, {...init, signal:controller.signal});
+      // Include JSON body delivery in the deadline, while preserving the native Response.
+      if (response.headers.get('content-type')?.includes('application/json')) {
+        await response.clone().arrayBuffer();
+      } else if (!response.ok) {
+        throw new Error('The server is temporarily unavailable. Please try again shortly.');
+      } else if (response.status !== 204 && url.pathname !== '/auth/logout') {
+        throw new Error(response.redirected && new URL(response.url).pathname === '/login'
+          ? 'Your session expired. Please sign in again.'
+          : 'The server returned an unexpected response. Please refresh and try again.');
+      }
+      return response;
+    } catch (error) {
+      const method = String(init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (timedOut || error instanceof TypeError) {
+        const message = timedOut ? 'The request timed out.' : 'The connection was interrupted.';
+        throw new Error(message + (['GET','HEAD'].includes(method)
+          ? ' Please try again.' : ' Check whether your change was saved before trying again.'));
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+      pendingRequests -= 1;
       if (control) actionEnd(control);
-    });
+    }
   };
 
   function setPageInert(locked) {
@@ -192,6 +230,31 @@
     document.body.setAttribute("aria-busy", "true");
     setPageInert(true);
     pageOverlay.inert = false;
+    window.clearTimeout(pageTimer);
+    const recover = () => {
+      if (mode === 'operation' && pendingRequests > 0) {
+        pageTimer = window.setTimeout(recover, 1000);
+        return;
+      }
+      unlockPage();
+      let message = document.getElementById('loading-recovery');
+      if (!message) {
+        message = document.createElement('div');
+        message.id = 'loading-recovery';
+        message.setAttribute('role', 'alert');
+        message.style.cssText = 'position:fixed;bottom:20px;left:20px;right:20px;z-index:10000;padding:16px;background:#fff4df;color:#442b00;border:1px solid #e5bb68;border-radius:12px';
+        document.body.append(message);
+      }
+      message.replaceChildren(document.createTextNode(mode === 'skeleton'
+        ? 'The page did not open. You can try the link again. '
+        : 'This action did not finish. Check whether your change was saved before trying again. '));
+      const dismiss = document.createElement('button');
+      dismiss.type = 'button';
+      dismiss.textContent = 'Dismiss';
+      dismiss.onclick = () => message.remove();
+      message.append(dismiss);
+    };
+    pageTimer = window.setTimeout(recover, mode === 'skeleton' ? 15000 : 60000);
     return pageOverlay;
   }
 
@@ -204,6 +267,7 @@
   }
 
   function unlockPage() {
+    window.clearTimeout(pageTimer);
     setPageInert(false);
     pageOverlay?.remove();
     pageOverlay = null;
@@ -250,15 +314,21 @@
     let destination;
     try { destination = new URL(anchor.href, window.location.href); } catch (_) { return; }
     if (destination.origin !== window.location.origin) return;
-    const onlyHashChanges = destination.pathname === window.location.pathname && destination.search === window.location.search && destination.hash;
-    if (!onlyHashChanges) transition("next page");
+    const sameDocument = destination.pathname === location.pathname && destination.search === location.search &&
+      (destination.hash || anchor.getAttribute('href')?.includes('#'));
+    if (sameDocument) return;
+    // Later delegated handlers may still prevent navigation in this same event.
+    window.setTimeout(() => { if (!event.defaultPrevented) transition('next page'); }, 0);
   });
-  document.addEventListener("submit", (event) => {
+  document.addEventListener('submit', event => {
     const method = event.submitter?.getAttribute('formmethod') || event.target.getAttribute('method');
-    if (method?.toLowerCase() === 'dialog') return;
-    if (!event.defaultPrevented) transition("next page");
+    const target = event.submitter?.getAttribute('formtarget') || event.target.getAttribute('target');
+    if (method?.toLowerCase() === 'dialog' || target && target !== '_self') return;
+    window.setTimeout(() => { if (!event.defaultPrevented) transition('next page'); }, 0);
   });
-  window.addEventListener("beforeunload", () => transition("next page"));
+  window.addEventListener('hashchange', () => {
+    if (pageOverlay?.classList.contains('is-page-transition')) unlockPage();
+  });
   window.addEventListener("pageshow", (event) => {
     if (event.persisted || pageOverlay) unlockPage();
   });
