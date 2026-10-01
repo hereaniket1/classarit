@@ -68,7 +68,7 @@ def retry_owner_notifications():
     """Pending deliveries survive restarts; row locking prevents concurrent sends."""
     with auth_engine().connect() as conn:
         pending = conn.execute(text(f'''SELECT id,notification_base_url FROM {schema_name()}.interest
-            WHERE owner_notified_at IS NULL AND notification_base_url IS NOT NULL
+            WHERE owner_notified_at IS NULL AND email_verified_at IS NOT NULL AND notification_base_url IS NOT NULL
             ORDER BY requested_at LIMIT 50''')).mappings().all()
     for row in pending:
         try:
@@ -81,19 +81,19 @@ def queue_owner_notifications(base_url):
     """Include older requests whose owner notification never succeeded."""
     with auth_engine().begin() as conn:
         conn.execute(text(f'''UPDATE {schema_name()}.interest SET notification_base_url=:url
-            WHERE owner_notified_at IS NULL AND notification_base_url IS NULL'''), {'url':base_url})
+            WHERE owner_notified_at IS NULL AND email_verified_at IS NOT NULL AND notification_base_url IS NULL'''), {'url':base_url})
 
 
 def _notify_owner(request_id, base_url):
     with auth_engine().begin() as conn:
         row = conn.execute(text(f'SELECT * FROM {schema_name()}.interest WHERE id=:id FOR UPDATE'),
                            {'id': request_id}).mappings().first()
-        if not row or row['owner_notified_at']:
+        if not row or row['owner_notified_at'] or not row.get('email_verified_at'):
             return
         link = escape(base_url.rstrip('/') + '/invitation-review/' + str(row['id']), quote=True)
-        _deliver('aniketpathak1@gmail.com', 'New Classarit access request',
-                 '<h2>New access request</h2>' + _details(row) +
-                 '<p>Email verification is required before approval. Sign in with your executive account to confirm your decision.</p>' +
+        _deliver('aniketpathak1@gmail.com', 'Verified Classarit access request',
+                 '<h2>Verified access request</h2>' + _details(row) +
+                 '<p>The applicant has completed email OTP verification. Sign in with your executive account to approve or decline this request.</p>' +
                  f'<p><a href="{link}/APPROVED">Review and approve access</a></p>' +
                  f'<p><a href="{link}/REJECTED">Review and decline access</a></p>')
         conn.execute(text(f'UPDATE {schema_name()}.interest SET owner_notified_at=CURRENT_TIMESTAMP WHERE id=:id'), {'id': request_id})
@@ -131,13 +131,8 @@ def request_invitation(payload, base_url=''):
         _deliver(email, 'Verify your Classarit access request',
                  f'<h2>Verify your email</h2><p>Your access-request verification code is <strong>{code}</strong>.</p>'
                  '<p>Expires in 10 minutes. This verifies an invitation request only; it does not create an account or grant access.</p>')
-    notification_pending = False
-    try:
-        _notify_owner(request_id, base_url)
-    except HTTPException:
-        notification_pending = True
     return {'ok':True,'verification_required':True,'challenge_id':str(challenge_id),
-            'notification_pending':notification_pending,'message':'Check your email for the access-request verification code.'}
+            'message':'Check your email for the access-request verification code.'}
 
 
 def verify_request(challenge_id, code, base_url):

@@ -141,7 +141,7 @@ class AdmissionTests(unittest.TestCase):
         self.assertIn('email_verified_at IS NOT NULL', str(self.conn.execute.call_args.args[0]))
         send.assert_not_called()
 
-    def test_new_request_uses_separate_otp_and_notifies_owner(self):
+    def test_new_request_sends_otp_without_notifying_owner(self):
         request_id = uuid4()
         self.conn.execute.side_effect = [result(None), result(None), result(None), result({'id':request_id}), result(None)]
         payload = InterestInput(full_name='Applicant', email='TEST@example.com', country='IN', usage_type='INDIVIDUAL')
@@ -153,7 +153,7 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(params['digest'], repository.challenge_digest(params['challenge'], 'INVITATION_REQUEST_OTP', 'test@example.com', '123456'))
         deliver.assert_called_once()
         self.assertEqual(deliver.call_args.args[0], 'test@example.com')
-        owner.assert_called_once_with(request_id, 'https://classarit.test')
+        owner.assert_not_called()
 
     def test_resend_cooldown_blocks_mail(self):
         self.conn.execute.side_effect = [result(None), result(None), result({'verification_required':True, 'recent':True})]
@@ -200,7 +200,7 @@ class AdmissionTests(unittest.TestCase):
 
     def test_owner_email_contains_details_and_confirmable_links(self):
         request_id = uuid4()
-        self.conn.execute.return_value = result({'id':request_id, 'full_name':'<Applicant>', 'email':'a@example.com', 'country':'IN', 'usage_type':'INDIVIDUAL', 'owner_notified_at':None})
+        self.conn.execute.return_value = result({'id':request_id, 'full_name':'<Applicant>', 'email':'a@example.com', 'country':'IN', 'usage_type':'INDIVIDUAL', 'owner_notified_at':None, 'email_verified_at':True})
         with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, '_deliver') as deliver:
             admissions._notify_owner(request_id, 'https://classarit.test/')
         to, subject, body = deliver.call_args.args
@@ -208,6 +208,21 @@ class AdmissionTests(unittest.TestCase):
         self.assertIn('&lt;Applicant&gt;', body)
         self.assertIn(f'/invitation-review/{request_id}/APPROVED', body)
         self.assertIn(f'/invitation-review/{request_id}/REJECTED', body)
+
+    def test_owner_email_requires_verified_otp_even_for_direct_retry(self):
+        for verified, notified in [(None, None), (True, True)]:
+            self.conn.execute.return_value = result({'owner_notified_at':notified, 'email_verified_at':verified})
+            with patch.object(admissions, 'auth_engine', return_value=self.engine), patch.object(admissions, '_deliver') as deliver:
+                admissions._notify_owner(uuid4(), 'https://classarit.test')
+            deliver.assert_not_called()
+
+    def test_retry_and_backfill_only_select_verified_requests(self):
+        self.conn.execute.return_value.mappings.return_value.all.return_value = []
+        with patch.object(admissions, 'auth_engine', return_value=self.engine):
+            admissions.retry_owner_notifications()
+            self.assertIn('email_verified_at IS NOT NULL', str(self.conn.execute.call_args.args[0]))
+            admissions.queue_owner_notifications('https://classarit.test')
+            self.assertIn('email_verified_at IS NOT NULL', str(self.conn.execute.call_args.args[0]))
 
     def test_review_link_preserves_destination_without_mutation(self):
         request_id = uuid4()

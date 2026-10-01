@@ -39,7 +39,9 @@ def check():
                 response = admissions.request_invitation(payload, 'https://classarit.test')
                 challenge = UUID(response['challenge_id'])
                 row = conn.execute(text(f'SELECT * FROM {schema}.interest WHERE verification_id=:id'), {'id':challenge}).mappings().one()
-                assert mail.call_count == 2  # Applicant OTP and owner review links.
+                assert mail.call_count == 1  # Applicant OTP only; owner must wait for verification.
+                admissions.retry_owner_notifications()
+                assert mail.call_count == 1
                 assert row['email_verified_at'] is None
                 try:
                     repository.google_account(claims)
