@@ -59,12 +59,19 @@
     </section>
     <section class="workspace-card executive-card danger-zone" id="executive-danger-card">
       <div class="section-heading">
-        <div><h2>Delete all data</h2><p class="subtext">Permanently deletes all application data, other accounts and audit records. Only authentication for aniketpathak1@gmail.com and database migration history are preserved. Product settings return to defaults.</p></div>
+        <div><h2>Reset application</h2><p class="subtext">Clear application data and audits while keeping the owner login for aniketpathak1@gmail.com.</p></div>
       </div>
       <form id="flush-data-form" class="danger-form">
-        <label>Confirmation<input class="form-control" name="confirmation" autocomplete="off" placeholder="DELETE ALL DATA" required></label>
-        <button type="submit" class="btn btn-danger" disabled>Delete all data</button>
+        <button type="submit" class="btn btn-danger">Reset</button>
       </form>
+      <dialog id="reset-confirmation" class="reset-confirmation" aria-labelledby="reset-title" aria-describedby="reset-description">
+        <h2 id="reset-title">Reset all application data?</h2>
+        <p id="reset-description">This permanently deletes all application data, other accounts, uploaded materials and audit records. Authentication for aniketpathak1@gmail.com is preserved. Product settings return to defaults. This cannot be undone.</p>
+        <form method="dialog" class="row-actions">
+          <button type="submit" value="no" class="btn btn-outline-primary" autofocus>No</button>
+          <button type="submit" value="yes" class="btn btn-danger">Yes</button>
+        </form>
+      </dialog>
     </section>
   </main>
 </div>

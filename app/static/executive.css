@@ -4,3 +4,5 @@
 #request-rows td:last-child { min-width: 160px; }
 #request-rows button { margin: 3px; }
 #terms-editor textarea { line-height: 1.6; }
+
+.reset-confirmation{width:min(480px,calc(100vw - 32px));border:1px solid #dbe4f0;border-radius:18px;padding:24px;color:#17233b;box-shadow:0 24px 80px #17233b33}.reset-confirmation::backdrop{background:#14243d80}.reset-confirmation h2{font-size:22px;margin:0 0 14px}.reset-confirmation p{line-height:1.6;margin-bottom:24px}.reset-confirmation .row-actions{justify-content:flex-end;gap:12px}

@@ -254,6 +254,8 @@
     if (!onlyHashChanges) transition("next page");
   });
   document.addEventListener("submit", (event) => {
+    const method = event.submitter?.getAttribute('formmethod') || event.target.getAttribute('method');
+    if (method?.toLowerCase() === 'dialog') return;
     if (!event.defaultPrevented) transition("next page");
   });
   window.addEventListener("beforeunload", () => transition("next page"));

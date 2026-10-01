@@ -85,11 +85,14 @@ try {
   await page.evaluate(()=>window.ClassaritLoading.unlockPage());
   await page.goto('http://classarit.test/executive');
   assert.equal(await page.locator('#delete-terms-form').count(),0);
-  assert.equal(await page.getByRole('button',{name:'Delete all data',exact:true}).count(),1);
-  assert.equal(await page.getByRole('button',{name:'Delete all data',exact:true}).isDisabled(),true);
-  await page.locator('#flush-data-form [name=confirmation]').fill('DELETE ALL DATA');
-  assert.equal(await page.getByRole('button',{name:'Delete all data',exact:true}).isEnabled(),true);
-  await page.locator('#flush-data-form [name=confirmation]').fill('');
+  assert.equal(await page.locator('#flush-data-form input').count(),0);
+  await page.getByRole('button',{name:'Reset',exact:true}).click();
+  await page.getByRole('dialog',{name:'Reset all application data?'}).waitFor();
+  await page.getByRole('button',{name:'No',exact:true}).click();
+  assert.equal(requests.filter(r=>r.url==='/api/executive/flush-data').length,0);
+  await page.getByRole('button',{name:'Reset',exact:true}).click();
+  await page.keyboard.press('Escape');
+  assert.equal(requests.filter(r=>r.url==='/api/executive/flush-data').length,0);
   console.log('Request form passed; checking executive actions');
   await page.getByRole('button',{name:'Approve',exact:true}).click();
   await page.getByRole('button',{name:'Send invitation',exact:true}).waitFor();
@@ -120,6 +123,13 @@ try {
   assert.equal(await page.locator('#signup-start-form .control-action-spinner').count(),1);
   await page.goto('http://classarit.test/google-profile');
   assert.equal(await page.locator('#google-profile-form [name=account_type]').getAttribute('required'),'');
+  await page.goto('http://classarit.test/executive');
+  await page.getByRole('button',{name:'Reset',exact:true}).click();
+  await page.getByRole('button',{name:'Yes',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('deleted'));
+  assert.equal(requests.filter(r=>r.url==='/api/executive/flush-data').length,1);
+  assert.equal(requests.find(r=>r.url==='/api/executive/flush-data').payload.confirmation,'DELETE ALL DATA');
+  await page.waitForFunction(()=>!document.querySelector('.global-page-loader'));
   assert.deepEqual(errors,[]);
   console.log('Passed: 16 responsive views, collapsed invitation form, request submission, required signup account type, review/email controls, invitation toggle, terms save, escaped applicant text, identity reuse and type-specific onboarding.');
 } finally { await browser.close(); }

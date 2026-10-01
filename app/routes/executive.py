@@ -87,7 +87,7 @@ def executive_flush_data(
     user=Depends(require_executive),
 ):
     if payload.confirmation != "DELETE ALL DATA":
-        raise HTTPException(422, "Type DELETE ALL DATA to confirm.")
+        raise HTTPException(422, "Confirm the reset before continuing.")
     try:
         result = maintenance.flush_application_data()
         return {"ok": True, **result}

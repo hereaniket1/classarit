@@ -147,17 +147,22 @@ document.addEventListener("change", async (event) => {
   }
 });
 
-flushForm?.addEventListener("input", () => {
-  const button = flushForm.querySelector("button");
-  button.disabled =
-    flushForm.elements.namedItem("confirmation")?.value !== "DELETE ALL DATA";
-});
-
-flushForm?.addEventListener("submit", async (event) => {
+const resetDialog = document.querySelector('#reset-confirmation');
+let resetting = false;
+flushForm?.addEventListener('submit', event => {
   event.preventDefault();
-  const button = flushForm.querySelector("button");
+  if (resetting || resetDialog.open) return;
+  resetDialog.returnValue = 'no';
+  resetDialog.showModal();
+});
+resetDialog?.addEventListener('cancel', () => { resetDialog.returnValue = 'no'; });
+resetDialog?.addEventListener('close', async () => {
+  if (resetDialog.returnValue !== 'yes' || resetting) return;
+  resetting = true;
+  const button = flushForm.querySelector('button');
   button.disabled = true;
-  loading?.busy(flushForm, "Resetting data");
+  loading?.lockPage('Resetting application data');
+  let leaving = false;
   try {
     const result = await api("/api/executive/flush-data", {
       method: "POST",
@@ -166,23 +171,25 @@ flushForm?.addEventListener("submit", async (event) => {
         "X-CSRF-Token": csrf,
       },
       body: JSON.stringify({
-        confirmation: flushForm.elements.namedItem("confirmation").value,
+        confirmation: "DELETE ALL DATA",
       }),
     });
-    flushForm.reset();
     await load();
     show(result.failed_upload_deletions ? 'Database reset complete. Some uploaded files could not be removed; retry the reset.' : 'All application data and audit records deleted. Your executive login is preserved.', Boolean(result.failed_upload_deletions));
     if (!result.failed_upload_deletions) {
+      leaving = true;
       window.setTimeout(() => {
         loading?.navigate('/executive', 'executive dashboard') || (location.href = '/executive');
       }, 800);
     }
   } catch (error) {
     show(error.message, true);
-    button.disabled =
-      flushForm.elements.namedItem("confirmation")?.value !== "DELETE ALL DATA";
   } finally {
-    loading?.end(flushForm);
+    if (!leaving) {
+      resetting = false;
+      button.disabled = false;
+      loading?.unlockPage();
+    }
   }
 });
 
