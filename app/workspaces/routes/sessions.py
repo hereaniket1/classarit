@@ -28,7 +28,8 @@ def create(p: SessionInput, background_tasks: BackgroundTasks, a=Depends(access)
 @router.post("/sessions/recurring", status_code=201)
 def create_recurring(p: RecurringSessionInput, background_tasks: BackgroundTasks, a=Depends(access)):
     result = scheduling.create_recurring(a, p)
-    notifications.send_student_schedule_notice(background_tasks, a, [row["id"] for row in result.get("sessions", [])], "added")
+    if not result.get('replayed'):
+        notifications.send_student_schedule_notice(background_tasks, a, [row["id"] for row in result.get("sessions", [])], "added")
     return result
 
 

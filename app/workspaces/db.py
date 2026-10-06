@@ -44,6 +44,17 @@ class Store:
             **fields,
         )
 
+    def insert_many(self, table, rows):
+        """Insert internal, uniformly shaped rows in bounded multi-value statements."""
+        if not rows:
+            return
+        columns = list(rows[0])
+        for offset in range(0, len(rows), 500):
+            chunk = rows[offset:offset+500]
+            params = {f'{key}_{index}': row[key] for index, row in enumerate(chunk) for key in columns}
+            values = ','.join('(' + ','.join(f':{key}_{index}' for key in columns) + ')' for index in range(len(chunk)))
+            self.execute(f"INSERT INTO {{s}}.{table} ({','.join(columns)}) VALUES {values}", **params)
+
 
 def transaction():
     try:

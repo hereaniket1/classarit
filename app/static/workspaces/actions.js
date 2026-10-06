@@ -308,6 +308,7 @@ export function action(s, key, id, refresh, context = {}) {
     );
   if (key === "session") {
     const program = selectedProgram(id);
+    const recurringRequestId = crypto.randomUUID();
     const startDate =
       context.dateKey || local(new Date(Date.now() + 24 * 60 * 60 * 1000)).slice(0, 10);
     const startTime =
@@ -403,6 +404,7 @@ export function action(s, key, id, refresh, context = {}) {
       async (data) => {
         if (data.schedule_type === "weekly") {
           const result = await api("/sessions/recurring", "POST", {
+            client_request_id: recurringRequestId,
             program_id: data.program_id,
             title: data.title,
             student_ids: data.student_ids || [],

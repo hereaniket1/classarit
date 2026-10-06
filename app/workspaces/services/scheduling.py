@@ -1,6 +1,9 @@
 """Session timing, resource conflicts, roster capacity, and attendance."""
 
 import calendar
+import hashlib
+import json
+from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
@@ -279,6 +282,15 @@ def create(a, p):
 
 def create_recurring(a, p):
     a.allow(*MANAGERS)
+    request_id = getattr(p, 'client_request_id', None)
+    request_hash = hashlib.sha256(json.dumps(p.model_dump(mode='json', exclude={'client_request_id'}), sort_keys=True).encode()).hexdigest() if request_id else None
+    if request_id:
+        previous = a.db.first('SELECT * FROM {s}.recurring_session_series WHERE workspace_id=:w AND client_request_id=:key', w=a.id, key=request_id)
+        if previous:
+            if previous['request_hash'] != request_hash:
+                raise HTTPException(409, 'This request was already used for a different schedule. Reopen the form to create a new schedule.')
+            saved = a.db.all('SELECT * FROM {s}.class_sessions WHERE workspace_id=:w AND recurring_series_id=:id ORDER BY starts_at', w=a.id, id=previous['id'])
+            return {'count':len(saved), 'series':previous, 'sessions':saved, 'replayed':True}
     if p.start_time.tzinfo is not None:
         raise HTTPException(422, "Use a local start time without a timezone offset.")
     dates = recurring_dates(p.start_date, p.repeat_months, p.repeat_weekdays)
@@ -299,16 +311,52 @@ def create_recurring(a, p):
     prog, ids, start, end, mode, url, vid, space, capacity = session_defaults(a, preview)
     duration_minutes = int((end - start).total_seconds() // 60)
     repeat_weekdays = list(dict.fromkeys(p.repeat_weekdays))
+    enrollments = a.db.all(
+        "SELECT * FROM {s}.enrollments WHERE workspace_id=:w AND program_id=:p AND status='ACTIVE'",
+        w=a.id, p=prog['id'])
+    selected = set(p.student_ids)
+    planned = []
     for day in dates:
-        validate_roster_capacity(
-            a,
-            prog,
-            instant(a, datetime.combine(day, p.start_time)),
-            capacity,
-            p.student_ids,
-        )
+        local_start = datetime.combine(day, p.start_time)
+        begins, ends = timing(a, local_start, local_start + timedelta(minutes=duration_minutes))
+        roster = {en['student_id']: en['id'] for en in enrollments
+                  if en['starts_on'] <= day and (en['ends_on'] is None or en['ends_on'] >= day)}
+        for student in selected:
+            roster.setdefault(student, None)
+        if len(roster) > capacity:
+            raise HTTPException(409, 'This schedule has more students than available seats.')
+        if planned and planned[-1]['ends_at'] > begins:
+            raise HTTPException(409, 'The recurring occurrences overlap each other.')
+        planned.append(dict(id=uuid4(), workspace_id=a.id, program_id=prog['id'],
+            title=p.title or prog['name'], starts_at=begins, ends_at=ends,
+            session_kind='EVENT' if prog['program_kind']=='EVENT' else 'REGULAR',
+            delivery_mode=mode, meeting_url=url, venue_id=vid, space_id=space,
+            capacity=capacity, series_original_starts_at=begins, edited_from_series=False,
+            roster=roster, status='SCHEDULED'))
+    all_students = set().union(*(row['roster'] for row in planned))
+    if all_students:
+        active = a.db.all("SELECT id FROM {s}.students WHERE workspace_id=:w AND id=ANY(:ids) AND status='ACTIVE'", w=a.id, ids=list(all_students))
+        if {r['id'] for r in active} != all_students:
+            raise HTTPException(409, 'A selected or enrolled student is unavailable or archived.')
+    existing = a.db.all("""SELECT cs.*,
+        ARRAY(SELECT membership_id FROM {s}.session_teachers st WHERE st.workspace_id=cs.workspace_id AND st.session_id=cs.id) AS teacher_ids,
+        ARRAY(SELECT student_id FROM {s}.session_participants sp WHERE sp.workspace_id=cs.workspace_id AND sp.session_id=cs.id AND sp.status='BOOKED') AS student_ids
+        FROM {s}.class_sessions cs WHERE workspace_id=:w AND status='SCHEDULED' AND starts_at<:end AND ends_at>:start""",
+        w=a.id, start=planned[0]['starts_at'], end=planned[-1]['ends_at'])
+    for row in planned:
+        for other in existing:
+            if other['starts_at'] >= row['ends_at'] or other['ends_at'] <= row['starts_at']:
+                continue
+            if vid and other['venue_id'] == vid and (not other['space_id'] or not space or other['space_id'] == space):
+                raise HTTPException(409, 'The venue or space is already booked at this time.')
+            if set(ids).intersection(other['teacher_ids']):
+                raise HTTPException(409, 'A teacher has an overlapping session.')
+            if set(row['roster']).intersection(other['student_ids']):
+                raise HTTPException(409, 'A student has an overlapping session.')
     series = a.db.insert(
         "recurring_session_series",
+        client_request_id=request_id,
+        request_hash=request_hash,
         workspace_id=a.id,
         program_id=prog["id"],
         title=p.title or prog["name"],
@@ -324,31 +372,20 @@ def create_recurring(a, p):
         capacity=capacity,
         created_by_membership_id=a.member["id"],
     )
-    rows = []
-    for day in dates:
-        original_start = instant(a, datetime.combine(day, p.start_time))
-        rows.append(
-            create(
-                a,
-                SimpleNamespace(
-                    program_id=prog["id"],
-                    title=p.title,
-                    starts_at=datetime.combine(day, p.start_time),
-                    ends_at=datetime.combine(day, p.start_time) + timedelta(minutes=duration_minutes),
-                    delivery_mode=mode,
-                    meeting_url=url,
-                    venue_id=vid,
-                    space_id=space,
-                    capacity=capacity,
-                    teacher_ids=ids,
-                    student_ids=p.student_ids,
-                    recurring_series_id=series["id"],
-                    series_original_starts_at=original_start,
-                    edited_from_series=False,
-                ),
-            )
-        )
-    return {"count": len(rows), "series": series, "sessions": rows}
+    rows, assignments, participants = [], [], []
+    for row in planned:
+        roster = row.pop('roster')
+        row['recurring_series_id'] = series['id']
+        rows.append(row)
+        assignments.extend(dict(workspace_id=a.id,session_id=row['id'],membership_id=mid) for mid in ids)
+        participants.extend(dict(id=uuid4(),workspace_id=a.id,program_id=prog['id'],session_id=row['id'],
+            student_id=student,enrollment_id=enrollment,participation_kind='ENROLLMENT' if enrollment else ('EVENT' if prog['program_kind']=='EVENT' else 'DIRECT'))
+            for student,enrollment in roster.items())
+    a.db.insert_many('class_sessions', rows)
+    a.db.insert_many('session_teachers', assignments)
+    a.db.insert_many('session_participants', participants)
+    return {'count':len(rows), 'series':series, 'sessions':rows}
+
 
 def disable_recurring_series(a, series_id):
     a.allow(*MANAGERS)

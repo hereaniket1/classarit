@@ -152,6 +152,7 @@ class SessionInput(Input):
 
 
 class RecurringSessionInput(Input):
+    client_request_id: UUID | None = None
     program_id: UUID
     title: str | None = None
     student_ids: list[UUID] = Field(default_factory=list)

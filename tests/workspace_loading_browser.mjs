@@ -43,6 +43,8 @@ try {
  await page.getByText('Simulated save failure',{exact:true}).waitFor();
  assert.equal(await page.locator('#save-overlay').isHidden(),true);
  assert.equal(await page.locator('#editor button[type="submit"]').isEnabled(),true);
+ assert.equal(await page.locator('#editor button[type="submit"]').textContent(),'Save');
+ assert.equal(await page.locator('#editor').evaluate(el=>el.classList.contains('is-saving')),false);
  failSave=false;
  await page.locator('#editor button[type="submit"]').click();
  await page.waitForFunction(()=>!document.querySelector('#editor').open);

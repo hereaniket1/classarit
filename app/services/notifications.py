@@ -52,11 +52,8 @@ def send_staff_change(background_tasks, email, workspace_name, full_name, change
 
 
 def _recipient_rows(a, session_ids):
-    rows = []
-    for session_id in session_ids:
-        rows.extend(
-            a.db.all(
-                """SELECT st.id AS student_id, st.full_name AS student_name, st.email AS student_email,
+    return a.db.all(
+        """SELECT st.id AS student_id, st.full_name AS student_name, st.email AS student_email,
                           g.email AS guardian_email, cs.title, cs.starts_at, cs.ends_at, p.name AS program_name
                 FROM {s}.session_participants sp
                 JOIN {s}.students st ON st.workspace_id=sp.workspace_id AND st.id=sp.student_id
@@ -64,12 +61,8 @@ def _recipient_rows(a, session_ids):
                 JOIN {s}.teaching_programs p ON p.workspace_id=cs.workspace_id AND p.id=cs.program_id
                 LEFT JOIN {s}.student_guardians sg ON sg.workspace_id=st.workspace_id AND sg.student_id=st.id AND sg.is_primary
                 LEFT JOIN {s}.guardians g ON g.workspace_id=sg.workspace_id AND g.id=sg.guardian_id
-                WHERE sp.workspace_id=:w AND sp.session_id=:session AND sp.status='BOOKED'""",
-                w=a.id,
-                session=session_id,
-            )
-        )
-    return rows
+                WHERE sp.workspace_id=:w AND sp.session_id=ANY(:sessions) AND sp.status='BOOKED'""",
+        w=a.id, sessions=session_ids)
 
 
 def send_student_schedule_notice(background_tasks, a, session_ids, action="added"):

@@ -93,7 +93,7 @@ export function edit(title, fields, save, options = {}) {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const button = submit;
-    const buttonText = button.textContent;
+    const buttonText = options.submitLabel || "Save";
     button.disabled = true;
     button.textContent = options.progressLabel || "Saving…";
     dialog.classList.add("is-saving");
