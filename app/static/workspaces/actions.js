@@ -22,6 +22,8 @@ export function action(s, key, id, refresh, context = {}) {
     ["AED", "AED - UAE dirham"],
     ["SGD", "SGD - Singapore dollar"],
   ].map(([id, name]) => ({ id, name }));
+  const individual = s.workspace?.workspace_type === "INDIVIDUAL";
+  if (individual && ["invite", "teachers", "member"].includes(key)) return;
   const staffRoleValues =
     s.workspace?.workspace_type === "INDIVIDUAL"
       ? ["TEACHER"]
@@ -136,11 +138,11 @@ export function action(s, key, id, refresh, context = {}) {
         max: 1440,
         required: true,
       }),
-      f("teacher_ids", "Teachers", "multiple", {
+      ...(individual ? [] : [f("teacher_ids", "Teachers", "multiple", {
         options: teachers,
         value: assignedTeachers,
         required: true,
-      }),
+      })]),
       ...deliveryFields("default_", {
         default_delivery_mode: program.default_delivery_mode || "ONLINE",
         default_meeting_url: program.default_meeting_url,

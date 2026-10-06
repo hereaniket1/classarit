@@ -234,6 +234,8 @@ def create_workspace(db, user, payload):
 
 def invite(a, payload):
     a.allow("OWNER", "ADMIN")
+    if a.workspace['workspace_type'] == 'INDIVIDUAL':
+        raise HTTPException(403, 'Individual teaching accounts cannot invite team members.')
     validate_staff_roles(a.workspace, payload.roles)
     email = payload.email.lower()
     account = a.db.first(
@@ -293,6 +295,8 @@ def accept_invite(db, user, token):
         raise HTTPException(
             409, "This invitation has expired or is no longer available."
         )
+    if workspace['workspace_type'] == 'INDIVIDUAL':
+        raise HTTPException(403, 'Individual teaching accounts cannot accept team invitations.')
     if not db.first(
         "SELECT 1 FROM {s}.user_emails WHERE app_user_id=:u AND lower(email::text)=:e AND verified_at IS NOT NULL",
         u=user["id"],

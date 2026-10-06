@@ -25,7 +25,7 @@ def admission_type(conn, email, invitation_token=None):
             JOIN {s}.workspaces w ON w.id=i.workspace_id
             WHERE i.token_hash=:token AND lower(i.email::text)=:email
               AND i.status='PENDING' AND i.expires_at>CURRENT_TIMESTAMP
-              AND w.status='ACTIVE'"""),
+              AND w.status='ACTIVE' AND w.workspace_type!='INDIVIDUAL'"""),
             {'token': hashlib.sha256(invitation_token.encode()).hexdigest(), 'email': email}).first()
         if invitation:
             return None

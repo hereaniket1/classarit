@@ -45,6 +45,16 @@ def location(a, mode, url, venue, space):
 
 
 def teachers(a, ids):
+    if a.workspace['workspace_type'] == 'INDIVIDUAL':
+        owner = a.db.first(
+            "SELECT id FROM {s}.workspace_memberships WHERE workspace_id=:w AND user_id=:u AND status='ACTIVE'",
+            w=a.id, u=a.workspace['owner_user_id'],
+        )
+        if not owner:
+            raise HTTPException(409, 'The individual workspace owner is unavailable.')
+        if ids and any(str(mid) != str(owner['id']) for mid in ids):
+            raise HTTPException(422, 'The owner is the only teacher for an individual account.')
+        ids = [owner['id']]
     ids = list(dict.fromkeys(ids))
     if not ids:
         raise HTTPException(422, "Assign at least one teacher.")
@@ -221,7 +231,7 @@ def update_program(a, program_id, p):
             p=program_id,
         )
     ]
-    teacher_ids = teachers(a, p.teacher_ids or current_teachers)
+    teacher_ids = teachers(a, p.teacher_ids if a.workspace['workspace_type'] == 'INDIVIDUAL' else (p.teacher_ids or current_teachers))
     fields = _program_fields(a, p)
     active_enrollments = a.db.first(
         "SELECT count(*) n FROM {s}.enrollments WHERE workspace_id=:w AND program_id=:p AND status IN ('ACTIVE','PAUSED')",

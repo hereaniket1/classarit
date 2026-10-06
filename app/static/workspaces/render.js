@@ -193,7 +193,7 @@ export function render(s, tab) {
       body += `<section class="workspace-card settings-card"><h3>Workspace access</h3><p class="subtext">Operators can manage daily records from their related pages. Deletion is reserved for Owners and Admins.</p></section>`;
       return body;
     }
-    if (admin) {
+    if (admin && s.workspace.workspace_type !== "INDIVIDUAL") {
       const memberRows = s.members.map((m) => {
         const isWorkspaceOwner = m.roles.includes("OWNER");
         const canManage = !isWorkspaceOwner || owner;
@@ -245,7 +245,7 @@ export function render(s, tab) {
     return (
       head(
         "Your team",
-        admin ? button("Invite member", "invite", "", "primary") : "",
+        admin && s.workspace.workspace_type !== "INDIVIDUAL" ? button("Invite member", "invite", "", "primary") : "",
       ) +
       table(
         ["Name", "Roles", "Status", ""],
