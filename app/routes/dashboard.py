@@ -141,6 +141,8 @@ def onboarding(request: Request, user=Depends(require_user), db=Depends(transact
 @router.get("/workspaces/{workspace_id}", response_class=HTMLResponse)
 def workspace_page(request: Request, a=Depends(access)):
     teacher_only = not bool(a.roles & MANAGERS)
+    choices = memberships(a.db, a.user)
+    owned = [w for w in choices if str(w['owner_user_id']) == str(a.user['id'])]
     account_type = a.user.get("account_type") or (
         "INDIVIDUAL"
         if a.workspace.get("workspace_type") == "INDIVIDUAL"
@@ -152,7 +154,8 @@ def workspace_page(request: Request, a=Depends(access)):
             request,
             a.user,
             workspace=a.workspace,
-            workspaces=memberships(a.db, a.user),
+            workspaces=choices,
+            can_add_workspace=account_type == 'ORGANIZATION' and 'OWNER' in a.roles and len(owned) < 3,
             organization_account=account_type == "ORGANIZATION",
             teacher_only=teacher_only,
             owner_view="OWNER" in a.roles,

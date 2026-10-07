@@ -83,6 +83,9 @@
                   {% endfor %}
                 </select>
               </label>
+              <a class="btn btn-sm btn-outline-primary" href="/dashboard?overview=1">Manage workspaces</a>
+              {% if can_add_workspace %}<a class="btn btn-sm btn-primary" href="/workspaces/new">Add workspace</a>{% endif %}
+              {% if owner_view %}<button type="button" id="make-default-workspace" class="btn btn-sm btn-outline-primary" {% if user.default_workspace_id|string == workspace.id|string %}disabled{% endif %}>{{ 'Default workspace' if user.default_workspace_id|string == workspace.id|string else 'Make default' }}</button>{% endif %}
               {% endif %}
 
               {% endif %}

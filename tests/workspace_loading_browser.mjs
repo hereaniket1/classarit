@@ -21,7 +21,7 @@ try {
    const snapshot=JSON.parse(await fs.readFile(path.join(fixture,'snapshot.json')));
    if(url.pathname.endsWith('/action-refs')) referenceLoads++;
    if(url.pathname.endsWith('/calendar')) {
-    snapshot.sessions = snapshot.sessions.slice(0,1).map(s=>({...s,status:'SCHEDULED',starts_at:new Date(Date.now()+3600000).toISOString(),ends_at:new Date(Date.now()+7200000).toISOString()}));
+    snapshot.sessions = Array.from({length:7},(_,i)=>({...snapshot.sessions[0],id:`calendar-test-${i}`,status:'SCHEDULED',starts_at:new Date(Date.now()+3600000).toISOString(),ends_at:new Date(Date.now()+7200000).toISOString()}));
     snapshot.policy=null;
    }
    snapshot.workspace.workspace_type=individual?"INDIVIDUAL":"INSTITUTE";
@@ -46,7 +46,11 @@ try {
     await page.locator('#calendar-popup').waitFor();
     await page.locator('[aria-label="Close day schedule"]').click();
     if(width===1440) {
+     const occupied=page.locator('.calendar-day').filter({has:page.locator('.day-marker')}).first();
+     assert.equal(await occupied.locator('.day-marker').count(),5);
+     assert.equal(await occupied.locator('.day-markers small').textContent(),'+2');
      await page.locator('.calendar-day').filter({has:page.locator('.day-marker')}).first().click();
+     assert.equal(await page.locator('#calendar-popup .day-session').count(),7);
      const before=referenceLoads;
      await page.locator('[data-calendar-action="cancel"]').first().click();
      await page.waitForFunction(()=>document.querySelector('#editor').open);
@@ -57,6 +61,22 @@ try {
    } else assert.equal(await page.locator('.agenda-day').count(),2);
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
    await page.screenshot({path:path.join(fixture,`${tab}-${width}.png`),fullPage:true});
+   if(tab==='calendar') {
+    const last=page.locator('[data-calendar-day]').last();
+    const start=await last.getAttribute('data-calendar-day');
+    await last.click();
+    await page.locator('[aria-label="Close day schedule"]').click();
+    for(const [view,count] of [['week',7],['day',1],['month',null]]) {
+     await page.locator(`[data-calendar-control="view-${view}"]`).click();
+     await page.waitForFunction(()=>document.querySelector('.month-calendar').getAttribute('aria-busy')==='false');
+     if(count) assert.equal(await page.locator('[data-calendar-day]').count(),count);
+     if(view==='week') {
+      assert.equal(await page.locator('[data-calendar-day]').first().getAttribute('data-calendar-day'),start);
+      assert.notEqual((await page.locator('[data-calendar-day]').last().getAttribute('data-calendar-day')).slice(0,7),start.slice(0,7));
+     }
+     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+    }
+   }
   }
  }
  for(const tab of ['classes','students','sessions','venues','settings']) {
@@ -92,6 +112,9 @@ try {
   assert.equal(await page.locator('#editor [name="teacher_ids"]').count()>0,!single);
   await page.locator('#cancel-editor').click();
  }
+ await page.locator('#make-default-workspace').click();
+ await page.waitForFunction(()=>document.querySelector('#make-default-workspace').textContent==='Default workspace');
+ assert.equal(await page.locator('#make-default-workspace').isDisabled(),true);
  assert.deepEqual(errors,[]);
  console.log('Passed: workspace section navigation, failed load retry, failed save cleanup and successful save retry.');
 } finally {await browser.close();}

@@ -2,8 +2,8 @@
 import { esc } from "./api.js?v=global-loading-20260930";
 import { icon } from "./icons.js?v=global-loading-20260930";
 
-const INLINE_SLOT_LIMIT = 3;
-const calendarState = { monthKey: "", monthData: null, loading: false };
+const INLINE_SLOT_LIMIT = 5;
+const calendarState = { monthKey: "", monthData: null, loading: false, view: "month", anchor: "" };
 
 export function dateKey(value, zone) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -20,6 +20,19 @@ export function dateKey(value, zone) {
 function ensureMonth(s, now = new Date()) {
   if (!calendarState.monthKey)
     calendarState.monthKey = dateKey(now, s.workspace.timezone).slice(0, 7);
+  if (!calendarState.anchor) calendarState.anchor = dateKey(now, s.workspace.timezone);
+}
+
+function shiftDay(key, offset) {
+  const value = new Date(`${key}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + offset);
+  return value.toISOString().slice(0,10);
+}
+
+export function getCalendarMonths(s) {
+  ensureMonth(s);
+  const last = calendarState.view === 'week' ? shiftDay(calendarState.anchor, 6).slice(0,7) : calendarState.monthKey;
+  return [...new Set([calendarState.monthKey, last])];
 }
 
 function monthDate(monthKey, day = 1) {
@@ -111,20 +124,30 @@ export function setCalendarLoading(loading) {
 
 export function updateCalendarView(action, s) {
   ensureMonth(s);
-  if (action === "previous")
-    calendarState.monthKey = addMonths(calendarState.monthKey, -1);
-  if (action === "next")
-    calendarState.monthKey = addMonths(calendarState.monthKey, 1);
-  if (action === "today") calendarState.monthKey = "";
-  ensureMonth(s);
+  if (action.startsWith('view-')) calendarState.view = action.slice(5);
+  if (action === 'today') {
+    calendarState.anchor = dateKey(new Date(), s.workspace.timezone);
+    calendarState.monthKey = calendarState.anchor.slice(0,7);
+  }
+  if (action === 'previous' || action === 'next') {
+    const direction = action === 'next' ? 1 : -1;
+    if (calendarState.view === 'month') {
+      calendarState.monthKey = addMonths(calendarState.monthKey, direction);
+      calendarState.anchor = `${calendarState.monthKey}-01`;
+    } else {
+      calendarState.anchor = shiftDay(calendarState.anchor, direction * (calendarState.view === 'week' ? 7 : 1));
+      calendarState.monthKey = calendarState.anchor.slice(0,7);
+    }
+  }
   return calendarState.monthKey;
 }
 
 export function calendarDays(s, now = new Date()) {
   ensureMonth(s, now);
   const today = dateKey(now, s.workspace.timezone);
-  return Array.from({ length: daysInMonth(calendarState.monthKey) }, (_, i) => {
-    const key = dayKey(calendarState.monthKey, i + 1);
+  const length = calendarState.view === 'month' ? daysInMonth(calendarState.monthKey) : calendarState.view === 'week' ? 7 : 1;
+  return Array.from({ length }, (_, i) => {
+    const key = calendarState.view === 'month' ? dayKey(calendarState.monthKey, i + 1) : shiftDay(calendarState.anchor, i);
     const past = key < today;
     const todayFlag = key === today;
     const sessions = sessionsForDay(s, key);
@@ -146,6 +169,7 @@ export function calendarDays(s, now = new Date()) {
 
 function calendarCells(s) {
   ensureMonth(s);
+  if (calendarState.view !== 'month') return calendarDays(s);
   const blanks = Array.from(
     { length: (monthDate(calendarState.monthKey).getUTCDay() + 6) % 7 },
     () => null,
@@ -157,7 +181,10 @@ const kind = x => x.status === "COMPLETED" ? ["check","Completed"] : x.session_k
 export function renderCalendar(s) {
   ensureMonth(s);
   const zone = s.workspace.timezone;
-  return `<section class="workspace-card month-calendar compact-calendar ${calendarState.loading ? "is-loading" : ""}" aria-busy="${calendarState.loading}"><div class="calendar-head"><div class="month-selector"><button data-calendar-control="previous" aria-label="Previous month">‹</button><h2>${esc(monthTitle(calendarState.monthKey))}</h2><button data-calendar-control="next" aria-label="Next month">›</button></div><button class="btn btn-outline-primary" data-calendar-control="today">Today</button></div><div class="calendar-legend">${[['program','Class'],['session','Event'],['check','Completed']].map(([i,label])=>`<span class="calendar-key kind-${i}">${icon(i)} ${label}</span>`).join('')}<small>Click a day for details</small></div><div class="calendar-surface"><div class="weekday-row">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<span>${d}</span>`).join('')}</div><div class="month-grid">${calendarCells(s).map(d=>d ? `<button class="calendar-day${d.today ? ' today' : ''}${d.past ? ' past' : ''}" data-calendar-day="${d.key}" aria-label="${esc(dayLabel(d.key))}: ${d.sessions.length} activities"><strong>${esc(dayNumber(d.key))}</strong><span class="day-markers">${d.sessions.slice(0,INLINE_SLOT_LIMIT).map(x=>{const [i,label]=kind(x);return `<span class="day-marker kind-${i}" title="${esc(label+': '+x.title+' · '+slot(x,d.key,zone))}">${icon(i)}</span>`;}).join('')}${d.sessions.length>INLINE_SLOT_LIMIT ? `<small>+${d.sessions.length-INLINE_SLOT_LIMIT}</small>` : ''}</span></button>` : '<span class="calendar-blank" aria-hidden="true"></span>').join('')}</div><div class="calendar-loader">${window.ClassaritLoading?.calendar('calendar') || 'Loading calendar…'}</div></div></section>`;
+  const view = calendarState.view;
+  const title = view === 'month' ? monthTitle(calendarState.monthKey) : view === 'day' ? dayLabel(calendarState.anchor) : `${dayLabel(calendarState.anchor)} – ${dayLabel(shiftDay(calendarState.anchor,6))}`;
+  const weekdays = view === 'month' ? ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] : calendarDays(s).map(d=>new Date(`${d.key}T12:00:00Z`).toLocaleDateString(undefined,{timeZone:'UTC',weekday:'short'}));
+  return `<section class="workspace-card month-calendar compact-calendar calendar-view-${view} ${calendarState.loading ? "is-loading" : ""}" aria-busy="${calendarState.loading}"><div class="calendar-head"><div class="month-selector"><button data-calendar-control="previous" aria-label="Previous ${view === 'week' ? '7 days' : view}">‹</button><h2>${esc(title)}</h2><button data-calendar-control="next" aria-label="Next ${view === 'week' ? '7 days' : view}">›</button></div><div class="calendar-toolbar"><div class="calendar-view-switch" role="group" aria-label="Calendar view">${[["day","Day"],["week","7 days"],["month","Month"]].map(([key,label])=>`<button type="button" data-calendar-control="view-${key}" aria-pressed="${view===key}">${label}</button>`).join('')}</div><button class="btn btn-outline-primary" data-calendar-control="today">Today</button></div></div><div class="calendar-legend">${[['program','Class'],['session','Event'],['check','Completed']].map(([i,label])=>`<span class="calendar-key kind-${i}">${icon(i)} ${label}</span>`).join('')}<small>Click a day for details</small></div><div class="calendar-surface"><div class="weekday-row">${weekdays.map(d=>`<span>${d}</span>`).join('')}</div><div class="month-grid">${calendarCells(s).map(d=>d ? `<button class="calendar-day${d.today ? ' today' : ''}${d.past ? ' past' : ''}" data-calendar-day="${d.key}" aria-label="${esc(dayLabel(d.key))}: ${d.sessions.length} activities"><strong>${esc(dayNumber(d.key))}</strong><span class="day-markers">${d.sessions.slice(0,INLINE_SLOT_LIMIT).map(x=>{const [i,label]=kind(x);return `<span class="day-marker kind-${i}" title="${esc(label+': '+x.title+' · '+slot(x,d.key,zone))}">${icon(i)}</span>`;}).join('')}${d.sessions.length>INLINE_SLOT_LIMIT ? `<small>+${d.sessions.length-INLINE_SLOT_LIMIT}</small>` : ''}</span></button>` : '<span class="calendar-blank" aria-hidden="true"></span>').join('')}</div><div class="calendar-loader">${window.ClassaritLoading?.calendar('calendar') || 'Loading calendar…'}</div></div></section>`;
 }
 
 function closeCalendarPopup() {
@@ -187,6 +214,7 @@ function calendarPopup() {
 export function openCalendarDay(s, key, manager = false) {
   const day = calendarDays(s).find((d) => d.key === key);
   if (!day) return;
+  if (calendarState.view === 'month') calendarState.anchor = key;
   const manageable = manager && !day.past;
   const modal = calendarPopup();
   const panel = modal.querySelector(".calendar-popup-panel");

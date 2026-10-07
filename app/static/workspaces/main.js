@@ -1,5 +1,6 @@
 import {
   getCalendarMonth,
+  getCalendarMonths,
   openCalendarDay,
   setCalendarLoading,
   setCalendarMonthData,
@@ -71,6 +72,17 @@ function sectionPath(name, month, options = {}) {
   const query = params.toString();
   return `/section/${encodeURIComponent(name)}${query ? `?${query}` : ""}`;
 }
+async function loadCalendar(month) {
+  const data = await api(sectionPath('calendar', month));
+  const months = getCalendarMonths(data);
+  if (months.length > 1) {
+    const extra = await api(sectionPath('calendar', months[1]));
+    data.calendar.sessions = [...new Map([...data.calendar.sessions, ...extra.calendar.sessions].map(row=>[row.id,row])).values()];
+    data.sessions = data.calendar.sessions;
+    data.venues = [...new Map([...data.venues, ...extra.venues].map(row=>[row.id,row])).values()];
+  }
+  return data;
+}
 async function loadTab(next = tab, options = {}) {
   if (!allowedTabs.includes(next)) return;
   if (!options.keepNotice) clearNotice();
@@ -89,7 +101,7 @@ async function loadTab(next = tab, options = {}) {
   const month = tab === "calendar" && snapshot ? getCalendarMonth(snapshot) : options.month;
   showSectionLoading(tab.replaceAll("-", " "));
   try {
-    const data = await api(sectionPath(tab, month, { history: scheduleHistory }));
+    const data = tab === "calendar" ? await loadCalendar(month) : await api(sectionPath(tab, month, { history: scheduleHistory }));
     if (version !== loadVersion) return;
     snapshot = data;
     if (tab === "calendar" && data.calendar) setCalendarMonthData(data.calendar);
@@ -112,7 +124,7 @@ async function moveCalendar(actionName) {
   draw();
   const version = ++loadVersion;
   try {
-    const data = await api(sectionPath("calendar", month));
+    const data = await loadCalendar(month);
     if (version !== loadVersion) return;
     snapshot = data;
     if (data.calendar) setCalendarMonthData(data.calendar);
@@ -286,3 +298,13 @@ document.addEventListener("click", e => {
     dateKey: button.dataset.dateKey,
   });
 }, true);
+
+ document.querySelector('#make-default-workspace')?.addEventListener('click', async event => {
+   const button = event.currentTarget;
+   button.disabled = true;
+   try {
+     await request('/api/account/default-workspace', 'POST', {workspace_id: workspaceId});
+     button.textContent = 'Default workspace';
+     notice('This workspace will open by default after login.');
+   } catch(error) { button.disabled = false; notice(error.message, true); }
+ });

@@ -37,6 +37,7 @@
         {% set has_workspace_context = owned_workspaces or assigned_workspaces %}
         <h1>{{ 'Overview' if is_owner else ('Welcome' if can_create and not has_workspace_context else 'My classes') }}</h1>
         {% if user.account_type %}<span class="workspace-kind">{{ 'Organization · up to 3 workspaces' if user.account_type == 'ORGANIZATION' else 'Individual · 1 workspace' }}</span>{% endif %}
+        {% if can_create and owned_workspaces %}<a class="btn btn-primary" href="/workspaces/new">Add workspace</a>{% endif %}
       </header>
       {% if is_owner %}
       <div class="metric-grid account-metrics">
