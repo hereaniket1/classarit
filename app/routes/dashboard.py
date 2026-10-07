@@ -25,7 +25,7 @@ ROLE_PRIORITY = ("OWNER", "ADMIN", "OPERATOR", "TEACHER", "STUDENT")
 def role_label(db, user, choices=None):
     choices = choices if choices is not None else memberships(db, user)
     roles = {role for choice in choices for role in (choice.get("roles") or [])}
-    if db.first(
+    if not roles.intersection(ROLE_PRIORITY[:4]) and db.first(
         "SELECT 1 FROM {s}.students WHERE linked_user_id=:u AND status='ACTIVE' LIMIT 1",
         u=user["id"],
     ):
@@ -75,7 +75,6 @@ def dashboard(
             raise HTTPException(404, "Workspace not found.")
         return RedirectResponse(f"/workspaces/{selected}", 303)
     choices = memberships(db, user)
-    display_role = role_label(db, user, choices)
     wants_overview = request.query_params.get("overview") in {"1", "true", "yes"}
     if not wants_overview:
         default_workspace_id = user.get("default_workspace_id")
@@ -91,8 +90,8 @@ def dashboard(
             request,
             user,
             appowner=False,
-            display_role=display_role,
-            **dashboard_data(db, user),
+            display_role=role_label(db, user, choices),
+            **dashboard_data(db, user, choices=choices),
         ),
     )
 

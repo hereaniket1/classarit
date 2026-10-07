@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..auth.dependencies import require_dashboard_user
+from ..auth.database import auth_engine
 from ..services import maintenance, telemetry
 from ..services import content
 from ..services.product_settings import all_settings, set_settings
@@ -60,11 +61,12 @@ def executive_page(request: Request, user=Depends(require_executive)):
 @router.get("/api/executive/dashboard")
 def executive_data(user=Depends(require_executive)):
     try:
-        return {
-            "settings": all_settings(),
-            "registrations": telemetry.registration_stats(),
-            "api": telemetry.executive_metrics(),
-        }
+        with auth_engine().connect() as conn:
+            return {
+                "settings": all_settings(conn),
+                "registrations": telemetry.registration_stats(conn),
+                "api": telemetry.executive_metrics(conn),
+            }
     except SQLAlchemyError:
         raise HTTPException(503, "Executive tables are not ready. Apply migration 008.") from None
 

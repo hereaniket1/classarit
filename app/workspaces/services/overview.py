@@ -3,8 +3,8 @@
 from .organizations import memberships
 
 
-def dashboard_data(db, user):
-    choices = memberships(db, user)
+def dashboard_data(db, user, choices=None):
+    choices = memberships(db, user) if choices is None else choices
     owned = [w for w in choices if str(w["owner_user_id"]) == str(user["id"])]
     assigned = [w for w in choices if str(w["owner_user_id"]) != str(user["id"])]
     # Each count is computed before joining programs, avoiding enrollment/roster fan-out.
@@ -50,19 +50,17 @@ def dashboard_data(db, user):
         JOIN {s}.membership_roles r ON r.workspace_id=m.workspace_id AND r.membership_id=m.id AND r.role='TEACHER'
         JOIN {s}.app_users u ON u.id=m.user_id AND u.status='ACTIVE'
         WHERE m.status='ACTIVE'""",u=user['id'])
+    counts = {r['id']: r for r in db.all("""SELECT w.id,
+        (SELECT count(*) FROM {s}.students st WHERE st.workspace_id=w.id AND st.status='ACTIVE') student_count,
+        (SELECT count(*) FROM {s}.class_sessions cs WHERE cs.workspace_id=w.id AND cs.status='SCHEDULED' AND cs.starts_at>CURRENT_TIMESTAMP) upcoming_sessions
+        FROM {s}.workspaces w WHERE w.owner_user_id=:u AND w.status='ACTIVE'""", u=user['id'])} if owned else {}
     for workspace in owned:
         workspace['teacher_count'] = len({r['user_id'] for r in teacher_rows if r['workspace_id']==workspace['id']})
         workspace["programs"] = [
             p for p in programs if p["workspace_id"] == workspace["id"]
         ]
-        workspace["student_count"] = db.first(
-            "SELECT count(*) n FROM {s}.students WHERE workspace_id=:w AND status='ACTIVE'",
-            w=workspace["id"],
-        )["n"]
-        workspace["upcoming_sessions"] = db.first(
-            "SELECT count(*) n FROM {s}.class_sessions WHERE workspace_id=:w AND status='SCHEDULED' AND starts_at>CURRENT_TIMESTAMP",
-            w=workspace["id"],
-        )["n"]
+        workspace['student_count'] = counts[workspace['id']]['student_count']
+        workspace['upcoming_sessions'] = counts[workspace['id']]['upcoming_sessions']
         workspace["popular"] = sorted(
             [
                 p

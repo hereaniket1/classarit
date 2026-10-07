@@ -58,18 +58,13 @@ def access(
         "SELECT * FROM {s}.workspaces WHERE id=:w" + lock, w=workspace_id
     )
     member = db.first(
-        "SELECT * FROM {s}.workspace_memberships WHERE workspace_id=:w AND user_id=:u AND status='ACTIVE'",
+        """SELECT m.*, ARRAY(SELECT r.role FROM {s}.membership_roles r
+            WHERE r.workspace_id=m.workspace_id AND r.membership_id=m.id) AS access_roles
+            FROM {s}.workspace_memberships m WHERE m.workspace_id=:w AND m.user_id=:u AND m.status='ACTIVE'""",
         w=workspace_id,
         u=user["id"],
     )
     if not workspace or workspace["status"] != "ACTIVE" or not member:
         raise HTTPException(404, "Workspace not found or access is unavailable.")
-    roles = {
-        r["role"]
-        for r in db.all(
-            "SELECT role FROM {s}.membership_roles WHERE workspace_id=:w AND membership_id=:m",
-            w=workspace_id,
-            m=member["id"],
-        )
-    }
+    roles = set(member.pop('access_roles'))
     return Access(db, workspace, member, roles, user)

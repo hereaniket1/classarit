@@ -1,6 +1,7 @@
 const notice = document.querySelector("#notice");
 const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
 const loading = window.ClassaritLoading;
+let dashboardData = {};
 const registrationMetrics = document.querySelector("#registration-metrics");
 const settingsCard = document.querySelector("#executive-settings-card");
 const latencyCard = document.querySelector("#executive-latency-card");
@@ -63,6 +64,7 @@ function metric(label, value) {
 }
 
 function render(data) {
+  dashboardData = data;
   const registrations = data.registrations || {};
   registrationMetrics.innerHTML = [
     metric("Students", registrations.students),
@@ -126,9 +128,7 @@ document.addEventListener("change", async (event) => {
       },
       body: JSON.stringify(payload),
     });
-    const current = await api("/api/executive/dashboard");
-    current.settings = result.settings;
-    render(current);
+    render({ ...dashboardData, settings: result.settings });
     show("Setting updated.");
   } catch (error) {
     input.checked = !input.checked;

@@ -10,7 +10,7 @@ const browser=await chromium.launch({headless:true,channel:'chrome'});
 try {
  const page=await browser.newPage();
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- let failSection=false,failSave=true,individual=false;
+ let failSection=false,failSave=true,individual=false,referenceLoads=0;
  await page.route('**/*', async route=>{
   const url=new URL(route.request().url());
   if(url.hostname==='cdn.jsdelivr.net') return route.fulfill({body:await fs.readFile('.cache/admissions-review/bootstrap.min.css'),contentType:'text/css'});
@@ -19,6 +19,11 @@ try {
    if(route.request().method()!=='GET') return route.fulfill({status:failSave?503:200,contentType:'application/json',body:JSON.stringify(failSave?{detail:'Simulated save failure'}:{id:'saved'})});
    if(failSection) return route.fulfill({status:503,contentType:'text/html',body:'Unavailable'});
    const snapshot=JSON.parse(await fs.readFile(path.join(fixture,'snapshot.json')));
+   if(url.pathname.endsWith('/action-refs')) referenceLoads++;
+   if(url.pathname.endsWith('/calendar')) {
+    snapshot.sessions = snapshot.sessions.slice(0,1).map(s=>({...s,status:'SCHEDULED',starts_at:new Date(Date.now()+3600000).toISOString(),ends_at:new Date(Date.now()+7200000).toISOString()}));
+    snapshot.policy=null;
+   }
    snapshot.workspace.workspace_type=individual?"INDIVIDUAL":"INSTITUTE";
    snapshot.calendar={month:url.searchParams.get('month')||new Date().toISOString().slice(0,7),sessions:snapshot.sessions};
    return route.fulfill({contentType:'application/json',body:JSON.stringify(snapshot)});
@@ -40,6 +45,15 @@ try {
     await page.locator('[data-calendar-day]').first().click();
     await page.locator('#calendar-popup').waitFor();
     await page.locator('[aria-label="Close day schedule"]').click();
+    if(width===1440) {
+     await page.locator('.calendar-day').filter({has:page.locator('.day-marker')}).first().click();
+     const before=referenceLoads;
+     await page.locator('[data-calendar-action="cancel"]').first().click();
+     await page.waitForFunction(()=>document.querySelector('#editor').open);
+     assert.equal(referenceLoads,before+1);
+     assert.equal(await page.locator('#editor [name="grant_makeups"]').count(),1);
+     await page.locator('#cancel-editor').click();
+    }
    } else assert.equal(await page.locator('.agenda-day').count(),2);
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
    await page.screenshot({path:path.join(fixture,`${tab}-${width}.png`),fullPage:true});
@@ -74,6 +88,7 @@ try {
   await page.waitForFunction(()=>document.querySelector('#workspace-content').getAttribute('aria-busy')==='false');
   assert.equal(await page.locator('[data-action="invite"]').count(),single?0:1);
   await page.locator('.quick-action[data-action="program"]').click();
+  await page.waitForFunction(()=>document.querySelector('#editor').open);
   assert.equal(await page.locator('#editor [name="teacher_ids"]').count()>0,!single);
   await page.locator('#cancel-editor').click();
  }

@@ -2,6 +2,9 @@
 
 import asyncio
 import logging
+import time
+from threading import Lock
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,9 +12,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from ..auth.database import auth_engine, schema_name
 
 logger = logging.getLogger(__name__)
+_cleanup_lock = Lock()
+_next_cleanup = 0.0
 
 
 def _insert_metric(method, path, route_template, status_code, latency_ms, user_id):
+    global _next_cleanup
     try:
         with auth_engine().begin() as conn:
             conn.execute(
@@ -29,9 +35,13 @@ def _insert_metric(method, path, route_template, status_code, latency_ms, user_i
                     "user": user_id,
                 },
             )
-            conn.execute(
-                text(f"DELETE FROM {schema_name()}.api_request_metrics WHERE captured_at < CURRENT_TIMESTAMP - interval '30 days'")
-            )
+            # Retention is maintenance work, not a second write on every API call.
+            if time.monotonic() >= _next_cleanup and _cleanup_lock.acquire(blocking=False):
+                try:
+                    conn.execute(text(f"DELETE FROM {schema_name()}.api_request_metrics WHERE captured_at < CURRENT_TIMESTAMP - interval '30 days'"))
+                    _next_cleanup = time.monotonic() + 3600
+                finally:
+                    _cleanup_lock.release()
     except Exception:
         logger.debug("API telemetry unavailable; metric skipped")
 
@@ -40,8 +50,8 @@ async def record_api_metric(method, path, route_template, status_code, latency_m
     await asyncio.to_thread(_insert_metric, method, path, route_template, status_code, latency_ms, user_id)
 
 
-def executive_metrics():
-    with auth_engine().connect() as conn:
+def executive_metrics(connection=None):
+    with (nullcontext(connection) if connection is not None else auth_engine().connect()) as conn:
         daily = [
             dict(row)
             for row in conn.execute(
@@ -82,8 +92,8 @@ def executive_metrics():
         return {"daily": daily, "routes": routes, "totals": dict(totals or {})}
 
 
-def registration_stats():
-    with auth_engine().connect() as conn:
+def registration_stats(connection=None):
+    with (nullcontext(connection) if connection is not None else auth_engine().connect()) as conn:
         row = conn.execute(
             text(
                 f"""SELECT

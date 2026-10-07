@@ -210,6 +210,14 @@ def _all(a, table, order="id"):
     )
 
 
+def _related(a, table, key, ids, order="id"):
+    if not ids:
+        return []
+    return a.db.all(
+        f"SELECT * FROM {{s}}.{table} WHERE workspace_id=:w AND {key}=ANY(:ids) ORDER BY {order}",
+        w=a.id, ids=list(ids))
+
+
 def _active_students(a):
     return a.db.all(
         """SELECT st.*,
@@ -362,15 +370,21 @@ def _load_business_profile(a, result):
 def section(a, tab, month=None, history=False):
     from fastapi import HTTPException
 
-    allowed = {"dashboard", "calendar", "classes", "students", "sessions", "venues", "team", "makeups", "reporting", "settings"}
+    allowed = {"action-refs", "dashboard", "calendar", "classes", "students", "sessions", "venues", "team", "makeups", "reporting", "settings"}
     if tab not in allowed:
         raise HTTPException(404, "Workspace section not found.")
     if tab == "reporting" and "OWNER" not in a.roles:
         raise HTTPException(403, "Only the workspace owner can view reporting.")
 
     result = _blank(a)
-    _action_refs(a, result)
-    _load_business_profile(a, result)
+    if tab == "action-refs":
+        _action_refs(a, result)
+        result['program_teachers'] = _related(a, 'program_teachers', 'program_id', _program_ids(result['programs']), 'program_id')
+        _load_business_profile(a, result)
+        _load_policy(a, result)
+        return result
+    if tab == "settings":
+        _load_business_profile(a, result)
 
     if tab == "dashboard":
         now = datetime.now(timezone.utc)
@@ -393,17 +407,17 @@ def section(a, tab, month=None, history=False):
         calendar = calendar_month(a, month_key)
         result["calendar"] = calendar
         result["sessions"] = calendar["sessions"]
-        _load_policy(a, result)
+        if any(row.get("venue_id") for row in result["sessions"]):
+            result["venues"] = _venues(a)
         return result
 
     if tab == "classes":
         result["programs"] = _programs(a)
         program_ids = _program_ids(result["programs"])
-        result["activities"] = _rows_for_ids(_all(a, "activities", "name"), "id", {r["activity_id"] for r in result["programs"]})
-        result["program_teachers"] = _rows_for_ids(_all(a, "program_teachers", "program_id"), "program_id", program_ids)
-        result["enrollments"] = _rows_for_ids(_all(a, "enrollments"), "program_id", program_ids)
-        if a.roles.intersection(MANAGERS):
-            result["students"] = _active_students(a)
+        result["activities"] = _related(a, "activities", "id", {r["activity_id"] for r in result["programs"]}, "name")
+        result["program_teachers"] = _related(a, "program_teachers", "program_id", program_ids, "program_id")
+        result["enrollments"] = _related(a, "enrollments", "program_id", program_ids)
+        result["members"] = _rows_for_ids(_members(a), "id", {r["membership_id"] for r in result["program_teachers"]})
         return result
 
     if tab == "students":
@@ -411,9 +425,9 @@ def section(a, tab, month=None, history=False):
             raise HTTPException(403, "This section is not available for your role.")
         result["students"] = _active_students(a)
         student_ids = {r["id"] for r in result["students"]}
-        result["student_guardians"] = _rows_for_ids(_all(a, "student_guardians", "student_id"), "student_id", student_ids)
+        result["student_guardians"] = _related(a, "student_guardians", "student_id", student_ids, "student_id")
         guardian_ids = {r["guardian_id"] for r in result["student_guardians"]}
-        result["guardians"] = _rows_for_ids(_all(a, "guardians", "full_name"), "id", guardian_ids)
+        result["guardians"] = _related(a, "guardians", "id", guardian_ids, "full_name")
         result["enrollments"] = _all(a, "enrollments")
         if not result["programs"]:
             result["programs"] = _programs(a)
@@ -426,8 +440,8 @@ def section(a, tab, month=None, history=False):
         program_ids = {r["program_id"] for r in result["sessions"]}
         if not result["programs"]:
             result["programs"] = _rows_for_ids(_programs(a), "id", program_ids)
-        result["recurring_series"] = _rows_for_ids(_all(a, "recurring_session_series", "start_date"), "id", {r["recurring_series_id"] for r in result["sessions"] if r.get("recurring_series_id")})
-        result["participants"] = _rows_for_ids(_all(a, "session_participants"), "session_id", session_ids)
+        result["recurring_series"] = _related(a, "recurring_session_series", "id", {r["recurring_series_id"] for r in result["sessions"] if r.get("recurring_series_id")}, "start_date")
+        result["participants"] = _related(a, "session_participants", "session_id", session_ids)
         participant_ids = {r["id"] for r in result["participants"]}
         student_ids = {r["student_id"] for r in result["participants"]}
         if a.roles.intersection(MANAGERS):
@@ -436,8 +450,10 @@ def section(a, tab, month=None, history=False):
             # Teachers only receive students booked into their returned sessions, but
             # retain the same verification context shown to workspace managers.
             result["students"] = _rows_for_ids(_active_students(a), "id", student_ids)
-        result["attendance"] = _rows_for_ids(_all(a, "attendance"), "participant_id", participant_ids)
+        result["attendance"] = _related(a, "attendance", "participant_id", participant_ids)
         _load_policy(a, result)
+        if any(row.get("venue_id") for row in result["sessions"]):
+            result["venues"] = _venues(a)
         return result
 
     if tab == "venues":
@@ -466,27 +482,11 @@ def section(a, tab, month=None, history=False):
                     m=a.member["id"],
                 )
             )
-            program_ids = _program_ids(result["programs"])
-            result["program_teachers"] = _rows_for_ids(
-                _all(a, "program_teachers", "program_id"),
-                "program_id",
-                program_ids,
-            )
             result["sessions"] = _sessions(a)
-            result["session_teachers"] = _rows_for_ids(
-                _all(a, "session_teachers", "session_id"),
-                "session_id",
-                {row["id"] for row in result["sessions"]},
-            )
         if can_delete_all:
             result["venues"] = _venues(a)
-            result["spaces"] = _spaces(a)
             result["students"] = _active_students(a)
             result["members"] = _members(a)
-            result["invitations"] = a.db.all(
-                "SELECT id,email,proposed_roles,status,expires_at FROM {s}.workspace_invitations WHERE workspace_id=:w ORDER BY created_at DESC",
-                w=a.id,
-            )
         return result
 
     if tab == "team":
@@ -513,15 +513,13 @@ def section(a, tab, month=None, history=False):
         return result
 
     if tab == "reporting":
-        result["metrics"] = {
-            "students": a.db.first("SELECT count(*) n FROM {s}.students WHERE workspace_id=:w AND status='ACTIVE'", w=a.id)["n"],
-            "classes": a.db.first("SELECT count(*) n FROM {s}.teaching_programs WHERE workspace_id=:w AND status='ACTIVE'", w=a.id)["n"],
-            "upcoming_sessions": a.db.first("SELECT count(*) n FROM {s}.class_sessions WHERE workspace_id=:w AND status='SCHEDULED' AND starts_at>CURRENT_TIMESTAMP", w=a.id)["n"],
-            "teachers": a.db.first("""SELECT count(DISTINCT m.id) n
-                FROM {s}.workspace_memberships m
-                JOIN {s}.membership_roles r ON r.workspace_id=m.workspace_id AND r.membership_id=m.id AND r.role='TEACHER'
-                WHERE m.workspace_id=:w AND m.status='ACTIVE'""", w=a.id)["n"],
-        }
+        result["metrics"] = a.db.first("""SELECT
+            (SELECT count(*) FROM {s}.students WHERE workspace_id=:w AND status='ACTIVE') students,
+            (SELECT count(*) FROM {s}.teaching_programs WHERE workspace_id=:w AND status='ACTIVE') classes,
+            (SELECT count(*) FROM {s}.class_sessions WHERE workspace_id=:w AND status='SCHEDULED' AND starts_at>CURRENT_TIMESTAMP) upcoming_sessions,
+            (SELECT count(DISTINCT m.id) FROM {s}.workspace_memberships m
+             JOIN {s}.membership_roles r ON r.workspace_id=m.workspace_id AND r.membership_id=m.id AND r.role='TEACHER'
+             WHERE m.workspace_id=:w AND m.status='ACTIVE') teachers""", w=a.id)
         return result
 
     return result

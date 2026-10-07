@@ -223,6 +223,19 @@ document
       notice(e.message, true);
     }
   });
+async function runAction(key, id, options = {}) {
+  const current = snapshot, version = loadVersion;
+  try {
+    const needsReferences = !key.startsWith('delete-') && !['complete','end-enrollment','disable-series','restore-series','attendance','revoke','release'].includes(key);
+    if (needsReferences && current.roles.some(role => ["OWNER", "ADMIN", "OPERATOR"].includes(role))) {
+      const refs = await api('/section/action-refs');
+      if (version !== loadVersion || current !== snapshot) return;
+      for (const field of ['programs','program_teachers','members','venues','spaces','students','business_profile','policy']) current[field] = refs[field];
+    }
+    await action(current, key, id, refresh, options);
+  } catch (error) { notice(error.message, true); }
+}
+
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-tab],[data-action],[data-schedule-history]");
   if (!b) return;
@@ -236,7 +249,7 @@ document.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     clearNotice();
-    action(snapshot, b.dataset.action, b.dataset.id, refresh);
+    runAction(b.dataset.action, b.dataset.id);
   }
 });
 if (workspaceId) loadTab(tab).catch((e) => notice(e.message, true));
@@ -269,7 +282,7 @@ document.addEventListener("click", e => {
   }
   const popup=document.querySelector("#calendar-popup");
   if(popup) popup.hidden = true;
-  action(snapshot,button.dataset.calendarAction,button.dataset.id || "",refresh,{
+  runAction(button.dataset.calendarAction,button.dataset.id || "",{
     dateKey: button.dataset.dateKey,
   });
 }, true);
