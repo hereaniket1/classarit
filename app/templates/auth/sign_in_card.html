@@ -1,18 +1,20 @@
   <section class="login-card" id="sign-in" aria-labelledby="login-title">
-    <div class="brand-mark">C</div><h2 id="login-title">{% if invitation_pending %}Log in to accept your invitation{% else %}Sign in to Classarit{% endif %}</h2>
-    <p class="text-muted">{% if invitation_pending %}Use the email address your team invited. After login, you’ll return to the invitation.{% else %}Log in to your Classarit dashboard.{% endif %}</p>
-    <button type="button" class="google-button" id="google-login" data-google-ready="{{ 'true' if google_ready else 'false' }}" disabled><span class="google-letter" aria-hidden="true">G</span>Continue with Google</button>
-    <p class="login-help">By continuing with Google, you accept the <button type="button" class="terms-link" data-terms-open>Classarit terms and conditions</button>. First-time Google users confirm them while completing profile setup.</p>
-    <p id="login-status" role="status" aria-live="polite">{% if not google_ready %}Google login will be available soon. Please check back later.{% endif %}</p>
-    <a href="/auth/google/login" id="same-window-login" hidden>Continue in this tab instead →</a>
-    <div class="login-choice"><span>or sign in with email</span></div>
+    <div class="auth-login-content">
+    <div class="brand-mark">C</div><h2 id="login-title">{% if invitation_pending %}Log in to accept your invitation{% else %}Welcome back{% endif %}</h2>
+    <p class="text-muted">{% if invitation_pending %}Use the email address your team invited. After login, you’ll return to the invitation.{% else %}Your classes and schedules are right where you left them.{% endif %}</p>
     <form id="password-login-form" class="password-login-form">
       <label>Email<input class="form-control" name="email" type="email" autocomplete="email" placeholder="you@example.com" required maxlength="254"></label>
       <label for="login-password">Password</label><div class="password-control"><input id="login-password" class="form-control" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required maxlength="128"><button type="button" class="password-toggle" data-toggle-password="login-password" aria-label="Show password" aria-pressed="false" title="Show password"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
       <button type="submit" class="btn btn-primary">Log in</button>
     </form>
     <p id="password-login-status" class="auth-form-status" role="status" aria-live="polite"></p>
+<div class="login-choice"><span>or continue with</span></div>
+    <button type="button" class="google-button" id="google-login" data-google-ready="{{ 'true' if google_ready else 'false' }}" disabled><svg class="google-logo" width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M43.61 24.46c0-1.36-.12-2.66-.35-3.92H24v7.42h11a9.4 9.4 0 0 1-4.08 6.18v5.14h6.61c3.87-3.56 6.08-8.8 6.08-14.82Z"/><path fill="#34A853" d="M24 44c5.51 0 10.13-1.83 13.51-4.97l-6.61-5.14c-1.83 1.23-4.18 1.96-6.9 1.96-5.31 0-9.81-3.59-11.42-8.42H5.75v5.3A20 20 0 0 0 24 44Z"/><path fill="#FBBC05" d="M12.58 27.43a12 12 0 0 1 0-6.86v-5.3H5.75a20 20 0 0 0 0 17.46l6.83-5.3Z"/><path fill="#EA4335" d="M24 12.15c3 0 5.69 1.03 7.81 3.05l5.86-5.86A19.65 19.65 0 0 0 24 4 20 20 0 0 0 5.75 15.27l6.83 5.3C14.19 15.74 18.69 12.15 24 12.15Z"/></svg>Continue with Google</button>
+    <p class="login-help">By continuing with Google, you accept the <button type="button" class="terms-link" data-terms-open>Classarit terms and conditions</button>. First-time Google users confirm them while completing profile setup.</p>
+    <p id="login-status" role="status" aria-live="polite">{% if not google_ready %}Google login will be available soon. Please check back later.{% endif %}</p>
+    <a href="/auth/google/login" id="same-window-login" hidden>Continue in this tab instead →</a>
     <div class="login-divider"></div><p class="signup-prompt">{% if invite_request_enabled and not invitation_pending %}New here? <button type="button" class="inline-button" data-request-invitation>Request an invitation</button>{% else %}New here? <button type="button" class="inline-button" data-signup>Create an account</button>{% endif %}</p>
+    </div>
     {% if invite_request_enabled %}
     <section class="invitation-request-card" id="invitation" hidden>
       <div class="signup-heading"><h3>Request an invitation</h3><button type="button" class="inline-button" data-close-invitation aria-label="Close invitation request">Close</button></div>

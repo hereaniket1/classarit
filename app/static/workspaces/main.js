@@ -10,13 +10,14 @@ import { render } from "./render.js?v=global-loading-20260930";
 import { action } from "./actions.js?v=global-loading-20260930";
 let snapshot,
   loadVersion = 0,
-  tab = document.body.dataset.teacherOnly === "true" ? "classes" : "calendar",
+  tab = "dashboard",
   switchingWorkspace = false,
   scheduleHistory = false;
 const allowedTabs =
   document.body.dataset.teacherOnly === "true"
-    ? ["classes", "sessions", "settings"]
+    ? ["dashboard", "classes", "sessions", "settings"]
     : [
+        "dashboard",
         "calendar",
         "classes",
         "students",

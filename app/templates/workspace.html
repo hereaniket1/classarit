@@ -19,6 +19,7 @@
   <script src="/static/responsive.js" defer></script>
     <link rel="stylesheet" href="/static/workspace-compact.css?v=password-profile-20260917">
     <link rel="stylesheet" href="/static/theme.css?v=landing-theme-20260930">
+<link rel="stylesheet" href="/static/ui-refresh.css">
 </head>
   <body
     data-workspace="{{ workspace.id if workspace else '' }}"
@@ -39,11 +40,11 @@
 
         <nav aria-label="Workspace sections">
           {% if teacher_only %}
-            {% set sections = [('classes','My classes'),('sessions','My schedule & attendance'),('settings','Settings')] %}
+            {% set sections = [('dashboard','Dashboard'),('classes','My classes'),('sessions','My schedule & attendance'),('settings','Settings')] %}
           {% else %}
-            {% set sections = [('calendar','Calendar'),('classes','Classes & events'),('students','Students'),('sessions','Schedule & attendance'),('venues','Venues')] %}{% if owner_view %}{% set sections = sections + [('reporting','Reporting')] %}{% endif %}{% set sections = sections + [('settings','Settings')] %}
+            {% set sections = [('dashboard','Dashboard'),('calendar','Calendar'),('classes','Classes & events'),('students','Students'),('sessions','Schedule & attendance'),('venues','Venues')] %}{% if owner_view %}{% set sections = sections + [('reporting','Reporting')] %}{% endif %}{% set sections = sections + [('settings','Settings')] %}
           {% endif %}
-          {% for key,title in sections %}<button type="button" data-tab="{{ key }}" title="{{ title }}">{{ icon({'calendar':'calendar','classes':'classes','students':'students','sessions':'calendar','venues':'venue','reporting':'reporting','settings':'gear'}[key]) }}<span>{{ title }}</span></button>{% endfor %}
+          {% for key,title in sections %}<button type="button" data-tab="{{ key }}" title="{{ title }}">{{ icon({'dashboard':'reporting','calendar':'calendar','classes':'classes','students':'students','sessions':'calendar','venues':'venue','reporting':'reporting','settings':'gear'}[key]) }}<span>{{ title }}</span></button>{% endfor %}
         </nav>
         {% endif %}
         <div class="workspace-footer">

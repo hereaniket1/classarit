@@ -27,6 +27,24 @@ try {
   return route.fulfill({body:await fs.readFile(file),contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});
  });
  await page.goto('http://classarit.test/workspace');
+ for(const width of [390,1440]) {
+  await page.setViewportSize({width,height:950});
+  for(const tab of ['dashboard','calendar']) {
+   if(width<800) await page.locator('.nav-toggle').click();
+   await page.locator(`[data-tab="${tab}"]`).click();
+   await page.waitForFunction(()=>document.querySelector('#workspace-content').getAttribute('aria-busy')==='false');
+   if(tab==='calendar') {
+    assert.equal(await page.locator('.weekday-row span').count(),7);
+    assert.equal(await page.locator('.weekday-row span').first().textContent(),'Mon');
+    assert.equal(await page.locator('.calendar-key').count(),3);
+    await page.locator('[data-calendar-day]').first().click();
+    await page.locator('#calendar-popup').waitFor();
+    await page.locator('[aria-label="Close day schedule"]').click();
+   } else assert.equal(await page.locator('.agenda-day').count(),2);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+   await page.screenshot({path:path.join(fixture,`${tab}-${width}.png`),fullPage:true});
+  }
+ }
  for(const tab of ['classes','students','sessions','venues','settings']) {
   await page.locator(`[data-tab="${tab}"]`).click();
   await page.waitForFunction(()=>document.querySelector('#workspace-content').getAttribute('aria-busy')==='false');

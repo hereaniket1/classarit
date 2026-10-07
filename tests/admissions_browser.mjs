@@ -47,7 +47,7 @@ try {
   }
   await page.goto('http://classarit.test/login');
   assert.equal(await page.locator('#invitation').isVisible(),false);
-  await page.locator('.public-nav').getByRole('link',{name:'Request invitation',exact:true}).click();
+  await page.locator('#sign-in').getByRole('button',{name:'Request an invitation',exact:true}).click();
   assert.equal(await page.locator('#invitation').isVisible(),true);
   assert.equal(await page.locator('#invitation-request-form [name=full_name]').evaluate(el=>el===document.activeElement),true);
   assert.equal(await page.locator('.public-nav [data-signup]').count(),0);
@@ -55,7 +55,7 @@ try {
   assert.equal(await page.locator('#signup-start-form').count(),0);
   await page.getByRole('button',{name:'Close invitation request'}).click();
   assert.equal(await page.locator('#invitation').isVisible(),false);
-  await page.locator('.public-nav').getByRole('link',{name:'Request invitation',exact:true}).click();
+  await page.locator('#sign-in').getByRole('button',{name:'Request an invitation',exact:true}).click();
   console.log('Responsive views passed; checking request submission');
   const form=page.locator('#invitation-request-form');
   await form.locator('[name=full_name]').fill('Review Applicant');
@@ -121,7 +121,7 @@ try {
   assert.equal(await page.locator('#business-profile-fields').isVisible(),false);
   await page.goto('http://classarit.test/open-signup');
   assert.equal(await page.locator('.public-nav [data-request-invitation]').count(),0);
-  await page.locator('.public-nav').getByRole('link',{name:'Sign up',exact:true}).click();
+  await page.locator('#sign-in').getByRole('button',{name:'Create an account',exact:true}).click();
   assert.equal(await page.locator('#signup-panel').isVisible(),true);
   assert.equal(await page.locator('#signup-start-form [name=account_type]').getAttribute('required'),'');
   assert.equal(await page.locator('#signup-start-form [name=account_type] option').count(),3);

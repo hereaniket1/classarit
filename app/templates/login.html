@@ -1,8 +1,9 @@
 {% extends "public_base.html" %}
 {% block title %}Log in · Classarit{% endblock %}
+{% block body_class %}public-page auth-split-page{% endblock %}
 {% block content %}
 <main class="login-layout">
-  <section class="login-intro"><p class="eyebrow">WELCOME TO YOUR CLASSROOM</p><h1>Pick up where<br>you left off.</h1><p>Your teaching day, a little more organized.</p><a href="/">← Back to home</a></section>
+  <section class="login-intro"><a class="auth-brand" href="/"><span class="brand-mark">C</span> Classarit</a><div class="auth-story"><span class="welcome-chip">Welcome back</span><h1>A calmer way to<br>run your classes.</h1><ul><li>Your teaching day, organized in one place</li><li>Students, schedules and materials together</li><li>More time for what you love: teaching</li></ul></div><div class="auth-story-footer">TEACH · ORGANIZE · GROW<p>The flow of knowledge.</p><a href="/">Back to home</a></div></section>
   {% include "auth/sign_in_card.html" %}
 </main>
 {% endblock %}

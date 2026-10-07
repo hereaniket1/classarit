@@ -2,7 +2,7 @@
 import { esc } from "./api.js?v=global-loading-20260930";
 import { icon } from "./icons.js?v=global-loading-20260930";
 
-const INLINE_SLOT_LIMIT = 2;
+const INLINE_SLOT_LIMIT = 3;
 const calendarState = { monthKey: "", monthData: null, loading: false };
 
 export function dateKey(value, zone) {
@@ -147,22 +147,17 @@ export function calendarDays(s, now = new Date()) {
 function calendarCells(s) {
   ensureMonth(s);
   const blanks = Array.from(
-    { length: monthDate(calendarState.monthKey).getUTCDay() },
+    { length: (monthDate(calendarState.monthKey).getUTCDay() + 6) % 7 },
     () => null,
   );
   return [...blanks, ...calendarDays(s)];
 }
 
+const kind = x => x.status === "COMPLETED" ? ["check","Completed"] : x.session_kind === "EVENT" ? ["session","Event"] : ["program","Class"];
 export function renderCalendar(s) {
   ensureMonth(s);
   const zone = s.workspace.timezone;
-  return `<section class="workspace-card month-calendar ${calendarState.loading ? "is-loading" : ""}" aria-busy="${calendarState.loading ? "true" : "false"}"><div class="calendar-head"><h2>${esc(monthTitle(calendarState.monthKey))}</h2><div class="calendar-controls"><button type="button" class="btn btn-outline-primary labeled-action" data-calendar-control="previous" title="Previous month"><span>Previous</span></button><button type="button" class="btn btn-outline-primary labeled-action" data-calendar-control="today" title="Current month"><span>Current month</span></button><button type="button" class="btn btn-outline-primary labeled-action" data-calendar-control="next" title="Next month"><span>Next</span></button></div></div><div class="calendar-surface"><div class="weekday-row">${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => `<span>${d}</span>`).join("")}</div><div class="month-grid">${calendarCells(s)
-    .map((d) =>
-      d
-        ? `<button type="button" class="calendar-day ${d.state}${d.today ? " today" : ""}" data-calendar-day="${d.key}" aria-label="${esc(dayLabel(d.key))}: ${d.sessions.length} scheduled classes"><strong>${esc(dayNumber(d.key))}</strong><small>${d.past ? `${d.sessions.length ? `${d.sessions.length} class${d.sessions.length === 1 ? "" : "es"}` : "Past day"}` : d.sessions.length ? `${d.sessions.length} class${d.sessions.length === 1 ? "" : "es"}` : "Free day"}</small>${d.sessions.slice(0, INLINE_SLOT_LIMIT).map((x) => `<span class="busy-slot">${esc(slot(x, d.key, zone))}</span>`).join("")}${d.sessions.length > INLINE_SLOT_LIMIT ? `<small>+${d.sessions.length - INLINE_SLOT_LIMIT} more</small>` : ""}</button>`
-        : '<span class="calendar-blank" aria-hidden="true"></span>',
-    )
-    .join("")}</div><div class="calendar-loader">${window.ClassaritLoading?.calendar("calendar") || '<p role="status">Loading calendar…</p>'}</div></div></section>`;
+  return `<section class="workspace-card month-calendar compact-calendar ${calendarState.loading ? "is-loading" : ""}" aria-busy="${calendarState.loading}"><div class="calendar-head"><div class="month-selector"><button data-calendar-control="previous" aria-label="Previous month">‹</button><h2>${esc(monthTitle(calendarState.monthKey))}</h2><button data-calendar-control="next" aria-label="Next month">›</button></div><button class="btn btn-outline-primary" data-calendar-control="today">Today</button></div><div class="calendar-legend">${[['program','Class'],['session','Event'],['check','Completed']].map(([i,label])=>`<span class="calendar-key kind-${i}">${icon(i)} ${label}</span>`).join('')}<small>Click a day for details</small></div><div class="calendar-surface"><div class="weekday-row">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<span>${d}</span>`).join('')}</div><div class="month-grid">${calendarCells(s).map(d=>d ? `<button class="calendar-day${d.today ? ' today' : ''}${d.past ? ' past' : ''}" data-calendar-day="${d.key}" aria-label="${esc(dayLabel(d.key))}: ${d.sessions.length} activities"><strong>${esc(dayNumber(d.key))}</strong><span class="day-markers">${d.sessions.slice(0,INLINE_SLOT_LIMIT).map(x=>{const [i,label]=kind(x);return `<span class="day-marker kind-${i}" title="${esc(label+': '+x.title+' · '+slot(x,d.key,zone))}">${icon(i)}</span>`;}).join('')}${d.sessions.length>INLINE_SLOT_LIMIT ? `<small>+${d.sessions.length-INLINE_SLOT_LIMIT}</small>` : ''}</span></button>` : '<span class="calendar-blank" aria-hidden="true"></span>').join('')}</div><div class="calendar-loader">${window.ClassaritLoading?.calendar('calendar') || 'Loading calendar…'}</div></div></section>`;
 }
 
 function closeCalendarPopup() {

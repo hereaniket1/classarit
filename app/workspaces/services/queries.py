@@ -1,6 +1,6 @@
 """Dashboard projection. Teacher-only memberships see assigned teaching records."""
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 import re
 from zoneinfo import ZoneInfo
 from ..access import MANAGERS
@@ -362,7 +362,7 @@ def _load_business_profile(a, result):
 def section(a, tab, month=None, history=False):
     from fastapi import HTTPException
 
-    allowed = {"calendar", "classes", "students", "sessions", "venues", "team", "makeups", "reporting", "settings"}
+    allowed = {"dashboard", "calendar", "classes", "students", "sessions", "venues", "team", "makeups", "reporting", "settings"}
     if tab not in allowed:
         raise HTTPException(404, "Workspace section not found.")
     if tab == "reporting" and "OWNER" not in a.roles:
@@ -371,6 +371,20 @@ def section(a, tab, month=None, history=False):
     result = _blank(a)
     _action_refs(a, result)
     _load_business_profile(a, result)
+
+    if tab == "dashboard":
+        now = datetime.now(timezone.utc)
+        local = now.astimezone(ZoneInfo(a.workspace["timezone"]))
+        until = (local + timedelta(days=2)).replace(hour=0, minute=0, second=0, microsecond=0)
+        teacher_clause = "" if a.roles.intersection(MANAGERS) else """AND EXISTS (
+            SELECT 1 FROM {s}.session_teachers st WHERE st.workspace_id=s.workspace_id
+            AND st.session_id=s.id AND st.membership_id=:m)"""
+        result["sessions"] = a.db.all(
+            """SELECT s.* FROM {s}.class_sessions s WHERE s.workspace_id=:w
+            AND s.status='SCHEDULED' AND s.ends_at>:now AND s.starts_at<:until """
+            + teacher_clause + " ORDER BY s.starts_at",
+            w=a.id, m=a.member["id"], now=now, until=until)
+        return result
 
     if tab == "calendar":
         month_key = month

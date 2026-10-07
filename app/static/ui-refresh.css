@@ -1,0 +1,38 @@
+/* Compact calendar and two-day agenda. */
+.compact-calendar.workspace-card{padding:0;overflow:hidden}
+.compact-calendar .calendar-head{padding:18px 20px;margin:0;display:flex;justify-content:space-between;align-items:center}
+.month-selector{display:flex;align-items:center;gap:14px;border:1px solid #dce5f4;border-radius:28px;padding:4px 8px;background:#f7f9fd}
+.month-selector h2{font-size:18px;margin:0!important}
+.month-selector button{border:0;background:transparent;color:#245bff;font-size:28px;width:32px;height:36px;line-height:1}
+.calendar-legend{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px 20px;border-top:1px solid #e5ebf4;border-bottom:1px solid #e5ebf4}
+.calendar-key{display:inline-flex;align-items:center;gap:6px;border:1px solid currentColor;border-radius:24px;padding:5px 12px;font-size:12px;font-weight:600}
+.calendar-legend>small{margin-left:auto;color:#748199;font-size:12px}
+.kind-program{color:#147e84;background:#eafffa}.kind-session{color:#7753d6;background:#f2edff}.kind-check{color:#3466c3;background:#edf3ff}
+.compact-calendar .weekday-row,.compact-calendar .month-grid{grid-template-columns:repeat(7,minmax(0,1fr));gap:0;margin:0}
+.compact-calendar .weekday-row span{text-align:center;padding:12px 0;color:#8696af;border-right:1px solid #e8edf6;font-size:11px}
+.compact-calendar .calendar-day,.compact-calendar .calendar-blank{min-height:70px;height:70px;border:0;border-top:1px solid #e8edf6;border-right:1px solid #e8edf6;border-radius:0;background:white;box-shadow:none;padding:7px 10px;color:#26354e;gap:3px;min-width:0}
+.compact-calendar .calendar-day{display:flex;flex-direction:column;align-items:flex-start}
+.compact-calendar .calendar-day strong{font-size:13px;line-height:24px;min-width:24px;text-align:center}
+.compact-calendar .calendar-day.today{background:#f3f6ff;box-shadow:none}.compact-calendar .calendar-day.today strong{background:#245bff;color:white;border-radius:50%}
+.compact-calendar .calendar-day:hover{background:#edf3ff;box-shadow:inset 0 0 0 1px #9db7ff}
+.compact-calendar .calendar-day:focus-visible{outline:2px solid #245bff;outline-offset:-3px}
+.day-markers{display:flex;gap:3px;align-items:center;max-width:100%}.day-marker{display:inline-flex;padding:2px;border-radius:4px}.day-marker .ui-icon{width:14px;height:14px}.day-markers small{font-size:10px}
+.agenda-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.agenda-day h3{display:flex;justify-content:space-between;align-items:center;font-size:19px}.agenda-day h3 small{font-size:12px;color:#7b889c;font-weight:400}.agenda-item{display:flex;gap:14px;padding:20px 0;border-top:1px solid #e8edf6}.agenda-item>.ui-icon{color:#245bff;flex-shrink:0;margin-top:3px}.agenda-item p{margin:6px 0;color:#6a7890;font-size:13px}.agenda-item small{color:#64748b}.agenda-empty{padding:26px 0;color:#79869b;font-size:14px}
+/* Split authentication layout in the Classarit palette. */
+.auth-split-page>.early-access-banner,.auth-split-page>.public-header,.auth-split-page>.public-footer{display:none}
+.auth-split-page .login-layout{display:grid;grid-template-columns:1fr 1fr;min-height:100dvh;max-width:none;margin:0;padding:0;gap:0;align-items:stretch}
+.auth-split-page .login-intro{position:relative;overflow:hidden;padding:48px clamp(30px,5vw,90px);background:radial-gradient(ellipse at 100% 0,#6989ff,transparent 65%),linear-gradient(145deg,#173ec8,#245bff 65%,#448aff);color:white;display:flex;flex-direction:column;justify-content:space-between;gap:60px}
+.auth-split-page .login-intro:after{content:"";position:absolute;width:480px;height:480px;border:1px solid #ffffff26;border-radius:50%;bottom:-160px;right:-150px;box-shadow:0 0 0 55px #ffffff08;pointer-events:none}
+.auth-brand{display:flex;gap:14px;align-items:center;font-size:27px;font-weight:750;text-decoration:none;color:white!important}.auth-brand .brand-mark{background:#ffffff26;border:1px solid #ffffff55;color:white}
+.welcome-chip{display:inline-block;padding:10px 16px;border-radius:30px;border:1px solid #ffffff55;background:#ffffff18;font-size:13px;font-weight:600}
+.auth-split-page .login-intro h1{color:white;font-size:clamp(32px,3.5vw,56px);line-height:1.12;letter-spacing:-1.5px;margin:24px 0 30px}.auth-story ul{list-style:none;padding:0;display:grid;gap:18px;font-size:17px}.auth-story li:before{content:'✓';display:inline-grid;place-items:center;width:30px;height:30px;background:#ffffff25;border-radius:8px;margin-right:12px}.auth-story-footer{border-top:1px solid #ffffff35;padding-top:22px;font-size:11px;letter-spacing:2px;z-index:1}.auth-story-footer p{font-size:17px;letter-spacing:0;margin:12px 0}.auth-story-footer a{color:white;letter-spacing:0}
+.auth-split-page .login-card{width:100%;max-width:620px;border:none;box-shadow:none;background:white;border-radius:0;margin:auto;padding:60px clamp(24px,5vw,70px);align-self:center}
+.auth-split-page .login-card>.brand-mark{display:none}.auth-split-page .login-card h2{font-size:32px;letter-spacing:-.7px}.auth-split-page .login-card>.text-muted{margin:16px 0 32px;line-height:1.6;color:#8a93a3!important}
+.auth-split-page .form-control,.auth-split-page .form-select{background:#f3f5f8;border:1px solid transparent;border-radius:10px;min-height:52px;padding:12px 16px}.auth-split-page .form-control:focus{border-color:#245bff;background:white}.auth-split-page .password-control input{padding-right:48px}
+.auth-split-page .password-login-form>.btn{margin-top:14px;min-height:52px;border-radius:10px;background:linear-gradient(100deg,#245bff,#1945d9)}.auth-split-page .google-button{display:flex;justify-content:center;align-items:center;gap:12px;border:1px solid #e1e5ec;border-radius:10px;box-shadow:none;background:white;min-height:52px;color:#202d43}.google-logo{flex-shrink:0}.auth-split-page .login-help{font-size:11px;line-height:1.6;color:#8893a5}.auth-split-page .login-choice{margin:22px 0;color:#8992a0}.auth-split-page .signup-prompt{font-size:13px}.auth-split-page .login-divider{margin:20px 0}
+@media(max-width:760px){.agenda-grid{grid-template-columns:1fr}.auth-split-page .login-layout{grid-template-columns:1fr}.auth-split-page .login-intro{padding:26px;gap:22px}.auth-split-page .auth-story h1{font-size:30px;margin:16px 0}.auth-story ul,.auth-story-footer{display:none}.auth-split-page .login-card{padding:32px 24px}.auth-brand{font-size:22px}.welcome-chip{font-size:11px;padding:6px 12px}.compact-calendar .calendar-head{padding:12px}.month-selector{gap:4px}.month-selector h2{font-size:15px}.calendar-legend{gap:7px;padding:10px}.calendar-key{padding:4px 7px;font-size:10px}.calendar-legend>small{width:100%;margin:0}.compact-calendar .calendar-day,.compact-calendar .calendar-blank{padding:5px 2px;height:68px;min-height:68px}.day-markers{gap:1px;flex-wrap:wrap}.day-marker{padding:1px}.day-marker .ui-icon{width:11px;height:11px}}
+.auth-split-page .login-intro .auth-brand{display:flex;flex-direction:row;align-items:center;gap:14px}
+.auth-split-page .auth-login-content>.brand-mark{display:none}
+.auth-split-page .auth-login-content>.text-muted{margin:16px 0 32px;line-height:1.6;color:#8a93a3!important}
+.auth-split-page .login-card:has(#signup-panel:not([hidden])) .auth-login-content,.auth-split-page .login-card:has(#invitation:not([hidden])) .auth-login-content{display:none}
+.auth-split-page .signup-panel,.auth-split-page .invitation-request-card{border:0;padding:0;margin:0;background:white;box-shadow:none}
