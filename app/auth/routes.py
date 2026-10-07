@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from ..views import templates
 from ..services import notifications
 from ..services.content import terms_context
-from ..services.product_settings import setting_enabled
+from ..services.product_settings import setting_enabled, all_settings
 from .settings import get_settings, google_callback_url
 from .dependencies import current_user, require_dashboard_user
 from . import repository
@@ -118,12 +118,13 @@ def record_terms(request, user, source):
 def login_page(request: Request):
     if current_user(request):
         return RedirectResponse('/dashboard', status_code=303)
+    product = all_settings()
     return templates.TemplateResponse('login.html', {
         'request':request,
         'google_ready':settings.ready,
-        'signup_enabled':setting_enabled('signup_enabled', True),
-        'invite_request_enabled':setting_enabled('invite_request_enabled', False),
-        'email_verification_enabled':setting_enabled('email_verification_enabled', True),
+        'signup_enabled':product['signup_enabled'],
+        'invite_request_enabled':product['invite_request_enabled'],
+        'email_verification_enabled':product['email_verification_enabled'],
         'invitation_pending':bool(request.session.get('pending_invitation')),
         'terms': terms_context(request),
     })

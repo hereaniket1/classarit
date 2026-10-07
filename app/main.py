@@ -8,6 +8,7 @@ import logging
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 from sqlalchemy.orm import Session
 from .auth.middleware import RequestSessionMiddleware
 
@@ -50,6 +51,7 @@ async def lifespan(app):
 
 settings = get_settings()
 app = FastAPI(title='Classarit', lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(RequestSessionMiddleware, secret_key=settings.session_secret,
                    session_cookie='classarit_session', max_age=43200, same_site='lax')
 app.mount('/static', StaticFiles(directory=PROJECT_DIR / 'app' / 'static'), name='static')
@@ -74,12 +76,16 @@ async def private_responses(request: Request, call_next):
     started = time.perf_counter()
     response = await call_next(request)
     latency_ms = int((time.perf_counter() - started) * 1000)
-    if request.url.path.startswith(('/auth/', '/api/', '/uploads/', '/dashboard', '/login', '/profile', '/workspaces/', '/invitations/', '/invitation-review/', '/legacy/', '/executive', '/static/')):
+    if request.url.path.startswith('/static/'):
+        # Keep ETag/Last-Modified validation so changed assets update on refresh.
+        response.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
+    elif request.url.path.startswith(('/auth/', '/api/', '/uploads/', '/dashboard', '/login', '/profile', '/workspaces/', '/invitations/', '/invitation-review/', '/legacy/', '/executive')):
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
+    response.headers['Server-Timing'] = f'app;dur={latency_ms}'
     if request.url.path.startswith(('/api/', '/auth/')):
         route = request.scope.get('route')
         route_template = getattr(route, 'path', request.url.path) if route else request.url.path

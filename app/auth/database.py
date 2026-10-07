@@ -4,7 +4,6 @@ import re
 from functools import lru_cache
 
 from sqlalchemy import URL, create_engine
-from sqlalchemy.pool import NullPool
 
 from ..config import PROJECT_DIR
 
@@ -25,6 +24,7 @@ def auth_engine():
         password=os.environ["DB_PASSWORD"], host=os.environ["DB_HOST"],
         port=int(os.getenv("DB_PORT", "5432")), database=os.environ["DB_NAME"],
     )
-    return create_engine(url, poolclass=NullPool, hide_parameters=True,
+    return create_engine(url, pool_size=5, max_overflow=5, pool_timeout=10,
+                         pool_pre_ping=True, pool_recycle=300, hide_parameters=True,
                          connect_args={"sslmode": os.getenv("DB_SSLMODE", "require"),
                                        "connect_timeout": 8, "prepare_threshold": None})
