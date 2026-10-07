@@ -17,8 +17,6 @@ EXECUTIVE_EMAILS = {"aniketpathak1@gmail.com"}
 
 class ExecutiveSettingsInput(BaseModel):
     invite_request_enabled: bool | None = None
-    google_new_accounts_enabled: bool | None = None
-    signup_enabled: bool | None = None
     email_verification_enabled: bool | None = None
     notification_emails_enabled: bool | None = None
 

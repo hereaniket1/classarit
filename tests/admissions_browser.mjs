@@ -51,6 +51,8 @@ try {
   assert.equal(await page.locator('#invitation').isVisible(),true);
   assert.equal(await page.locator('#invitation-request-form [name=full_name]').evaluate(el=>el===document.activeElement),true);
   assert.equal(await page.locator('.public-nav [data-signup]').count(),0);
+  assert.equal(await page.locator('#sign-in [data-signup]').count(),0);
+  assert.equal(await page.locator('#signup-start-form').count(),0);
   await page.getByRole('button',{name:'Close invitation request'}).click();
   assert.equal(await page.locator('#invitation').isVisible(),false);
   await page.locator('.public-nav').getByRole('link',{name:'Request invitation',exact:true}).click();
@@ -84,6 +86,9 @@ try {
   await page.screenshot({path:path.join(fixtures,'loading-page-transition.png'),fullPage:true});
   await page.evaluate(()=>window.ClassaritLoading.unlockPage());
   await page.goto('http://classarit.test/executive');
+  await page.locator('[data-setting=invite_request_enabled]').waitFor({state:'attached'});
+  assert.equal(await page.locator('[data-setting=signup_enabled], [data-setting=google_new_accounts_enabled]').count(),0);
+  await page.getByText(/Invitation only is enabled. Open signup is disabled/).waitFor();
   assert.equal(await page.locator('#delete-terms-form').count(),0);
   assert.equal(await page.locator('#flush-data-form input').count(),0);
   await page.getByRole('button',{name:'Reset',exact:true}).click();
@@ -102,6 +107,7 @@ try {
   await page.locator('.setting-toggle').filter({has:page.locator('[data-setting=invite_request_enabled]')}).click();
   console.log('Approval and email controls passed; checking settings');
   await page.waitForFunction(()=>!document.querySelector('[data-setting=invite_request_enabled]').checked);
+  await page.getByText(/Invitation only is disabled. User signup is enabled/).waitFor();
   await page.locator('#terms-editor [name=body]').fill('Updated review terms');
   await page.getByRole('button',{name:'Save terms',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#terms-editor-status').textContent.includes('Saved'));

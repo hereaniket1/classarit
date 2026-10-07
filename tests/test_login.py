@@ -101,7 +101,7 @@ class LoginTests(OwnerCases, WorkspaceCases, unittest.TestCase):
         data = exec_client.get('/api/executive/dashboard')
         self.assertEqual(data.status_code, 200, data.text)
         self.assertIn('api', data.json())
-        changed = exec_client.patch('/api/executive/settings', headers={'X-CSRF-Token':exec_csrf}, json={'google_new_accounts_enabled':False,'signup_enabled':False,'notification_emails_enabled':False})
+        changed = exec_client.patch('/api/executive/settings', headers={'X-CSRF-Token':exec_csrf}, json={'invite_request_enabled':True,'notification_emails_enabled':False})
         self.assertEqual(changed.status_code, 200, changed.text)
         self.assertFalse(changed.json()['settings']['google_new_accounts_enabled'])
         self.assertEqual(self.client.post('/auth/register/start', json={'full_name':'Blocked','email':'blocked@example.com','account_type':'INDIVIDUAL','accepted_terms':True}).status_code, 403)

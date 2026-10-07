@@ -12,11 +12,11 @@
       <button type="submit" class="btn btn-primary">Log in</button>
     </form>
     <p id="password-login-status" class="auth-form-status" role="status" aria-live="polite"></p>
-    <div class="login-divider"></div><p class="signup-prompt">New here? <button type="button" class="inline-button" data-signup>Create an account</button></p>
+    <div class="login-divider"></div><p class="signup-prompt">{% if invite_request_enabled and not invitation_pending %}New here? <button type="button" class="inline-button" data-request-invitation>Request an invitation</button>{% else %}New here? <button type="button" class="inline-button" data-signup>Create an account</button>{% endif %}</p>
     {% if invite_request_enabled %}
     <section class="invitation-request-card" id="invitation" hidden>
       <div class="signup-heading"><h3>Request an invitation</h3><button type="button" class="inline-button" data-close-invitation aria-label="Close invitation request">Close</button></div>
-      <p class="login-help">Early access is by invitation. Tell us how you plan to use Classarit. Already approved? Create your account below using the approved email.</p>
+      <p class="login-help">Early access is by invitation. Tell us how you plan to use Classarit. Already approved? Choose Continue with Google using your approved email.</p>
       <form id="invitation-request-form">
         <label>Full name<input class="form-control" name="full_name" autocomplete="name" required maxlength="150"></label>
         <label>Email<input class="form-control" name="email" type="email" autocomplete="email" required maxlength="254"></label>
@@ -35,9 +35,9 @@
       </form>
     </section>
     {% endif %}
-    <section class="signup-panel" id="signup-panel" data-email-verification="{{ 'true' if email_verification_enabled else 'false' }}" {% if not signup_enabled %}data-disabled="true"{% endif %} hidden>
+    <section class="signup-panel" id="signup-panel" data-email-verification="{{ 'true' if email_verification_enabled else 'false' }}" {% if invite_request_enabled and not invitation_pending %}data-disabled="true"{% endif %} hidden>
       <div class="signup-heading"><h3>Create your account</h3><button type="button" class="inline-button" data-close-signup aria-label="Close signup">Close</button></div>
-      {% if signup_enabled %}
+      {% if not invite_request_enabled or invitation_pending %}
       <form id="signup-start-form">
         <label>Full name<input class="form-control" name="full_name" autocomplete="name" required maxlength="150"></label>
         <label>Phone number<input class="form-control" name="phone" type="tel" autocomplete="tel" required minlength="5" maxlength="30"></label>

@@ -24,6 +24,9 @@ def _bool(value, default=True):
 
 
 def setting_enabled(key, default=None):
+    # Legacy registration flags are derived, never independent switches.
+    if key in ('signup_enabled', 'google_new_accounts_enabled'):
+        return not setting_enabled('invite_request_enabled', False)
     if default is None:
         default = DEFAULTS.get(key, True)
     if key not in DEFAULTS:
@@ -60,14 +63,17 @@ def all_settings(conn=None):
     finally:
         if close:
             conn.close()
+    values['signup_enabled'] = not values['invite_request_enabled']
+    values['google_new_accounts_enabled'] = not values['invite_request_enabled']
     return values
 
 
 def set_settings(updates, user_id):
-    allowed = {key: bool(value) for key, value in updates.items() if key in DEFAULTS}
-    # Switching back to open registration must also reopen the password signup form.
-    if allowed.get('invite_request_enabled') is False:
-        allowed['signup_enabled'] = True
+    allowed = {key: bool(value) for key, value in updates.items()
+               if key in DEFAULTS and key not in ('signup_enabled', 'google_new_accounts_enabled')}
+    if 'invite_request_enabled' in allowed:
+        allowed['signup_enabled'] = not allowed['invite_request_enabled']
+        allowed['google_new_accounts_enabled'] = not allowed['invite_request_enabled']
     if not allowed:
         return all_settings()
     with auth_engine().begin() as conn:

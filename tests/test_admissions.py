@@ -73,14 +73,31 @@ class AdmissionTests(unittest.TestCase):
         with patch.object(product_settings, 'auth_engine', return_value=self.engine), patch.object(product_settings, 'all_settings', return_value={}):
             product_settings.set_settings({'invite_request_enabled': False, 'signup_enabled': False}, uuid4())
         saved = {call.args[1]['key']: call.args[1]['value'] for call in self.conn.execute.call_args_list}
-        self.assertEqual(saved, {'invite_request_enabled': 'false', 'signup_enabled': 'true'})
+        self.assertEqual(saved, {'invite_request_enabled': 'false', 'signup_enabled': 'true', 'google_new_accounts_enabled': 'true'})
         self.engine.begin.assert_called_once()
 
-    def test_enabling_invitation_mode_preserves_signup_control(self):
+    def test_enabling_invitation_mode_disables_open_signup(self):
         with patch.object(product_settings, 'auth_engine', return_value=self.engine), patch.object(product_settings, 'all_settings', return_value={}):
             product_settings.set_settings({'invite_request_enabled': True}, uuid4())
         saved = {call.args[1]['key']: call.args[1]['value'] for call in self.conn.execute.call_args_list}
-        self.assertEqual(saved, {'invite_request_enabled': 'true'})
+        self.assertEqual(saved, {'invite_request_enabled': 'true', 'signup_enabled': 'false', 'google_new_accounts_enabled': 'false'})
+
+    def test_legacy_flags_cannot_override_invitation_mode(self):
+        for enabled in (True, False):
+            self.conn.execute.return_value = result(('true' if enabled else 'false',))
+            with patch.object(product_settings, 'auth_engine', return_value=self.engine):
+                for key in ('signup_enabled', 'google_new_accounts_enabled'):
+                    self.assertEqual(product_settings.setting_enabled(key), not enabled)
+                    self.assertEqual(self.conn.execute.call_args.args[1]['key'], 'invite_request_enabled')
+
+    def test_dashboard_derives_signup_from_invitation_mode(self):
+        self.conn.execute.return_value.mappings.return_value = [
+            {'key':'invite_request_enabled', 'value':'true'},
+            {'key':'signup_enabled', 'value':'true'},
+            {'key':'google_new_accounts_enabled', 'value':'true'}]
+        settings = product_settings.all_settings(self.conn)
+        self.assertFalse(settings['signup_enabled'])
+        self.assertFalse(settings['google_new_accounts_enabled'])
 
     def test_duplicate_request_does_not_reset_approval_or_send_email(self):
         self.conn.execute.side_effect = [result(None), result(None), result({'id': uuid4()})]

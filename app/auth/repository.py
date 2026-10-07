@@ -182,10 +182,7 @@ def google_account(claims, invitation_token=None):
                             {"id": user_id,"name": claims.get("name") or email,"picture": claims.get("picture")},
                         )
                     else:
-                        invitation_mode = setting_enabled('invite_request_enabled', False)
                         account_type = admission_type(conn, email, invitation_token)
-                        if not invitation_mode and not setting_enabled("google_new_accounts_enabled", True):
-                            raise AccountUnavailable("New Google accounts are disabled")
                         user_id = uuid4()
                         is_new_user = True
                         conn.execute(text(f'''INSERT INTO {s}.app_users(id,full_name,avatar_url,status)
@@ -327,8 +324,6 @@ def _new_challenge(conn, user_id, email, purpose):
 
 
 def start_password_registration(email, full_name, phone, password, account_type, invitation_token=None):
-    if not setting_enabled("signup_enabled", True):
-        raise AccountUnavailable("Signup is disabled right now")
     email = normalize_email(email)
     name = (full_name or "").strip()
     phone = (phone or "").strip()
@@ -479,8 +474,6 @@ def verify_email(challenge_id, code, user_id=None, invitation_token=None):
             invalid_error = error
         else:
             if not user_id:
-                if not setting_enabled('signup_enabled', True):
-                    raise AccountUnavailable('Signup is disabled right now')
                 approved_type = admission_type(conn, str(row['target_email']).lower(), invitation_token)
                 resolve_account_type(row['account_type'], approved_type)
             conn.execute(
@@ -585,8 +578,6 @@ def session_profile(user_id):
 
 
 def start_registration(email, full_name, account_type, invitation_token=None):
-    if not setting_enabled("signup_enabled", True):
-        raise AccountUnavailable("Signup is disabled right now")
     email = normalize_email(email)
     name = (full_name or email).strip()[:150] or email
     s = schema_name()

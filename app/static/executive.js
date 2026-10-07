@@ -15,16 +15,8 @@ const dashboardRegions = [
 
 const labels = {
   invite_request_enabled: [
-    "Invitation-only signup",
-    "New accounts need an approved request or a valid team invitation. Turning this off automatically enables open signup and shows Sign up at the top. Existing users can still log in.",
-  ],
-  google_new_accounts_enabled: [
-    "Google new-account login",
-    "Controls open Google registration. In invitation mode, approved and email-verified applicants can join with Google. Existing users can still log in.",
-  ],
-  signup_enabled: [
-    "New account signup",
-    "When off, new password and email OTP registrations are paused. Existing users can still log in.",
+    "Invitation only",
+    "",
   ],
   email_verification_enabled: [
     "Email verification",
@@ -82,7 +74,7 @@ function render(data) {
   document.querySelector("#settings-grid").innerHTML = Object.entries(labels)
     .map(
       ([key, [title, help]]) =>
-        `<label class="setting-toggle"><span><strong>${title}</strong><small>${help}</small></span><span class="switch"><input type="checkbox" data-setting="${key}" ${data.settings?.[key] ? "checked" : ""}><span class="slider"></span></span></label>`,
+        `<label class="setting-toggle"><span><strong>${title}</strong><small>${key === 'invite_request_enabled' ? (data.settings?.[key] ? 'Invitation only is enabled. Open signup is disabled; new users need an approved request or a valid team invitation. Existing users can still log in.' : 'Invitation only is disabled. User signup is enabled with Google or email and password. Existing users can still log in.') : help}</small></span><span class="switch"><input type="checkbox" data-setting="${key}" ${data.settings?.[key] ? "checked" : ""}><span class="slider"></span></span></label>`,
     )
     .join("");
   const apiData = data.api || {};
