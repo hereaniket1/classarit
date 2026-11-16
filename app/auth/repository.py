@@ -341,7 +341,7 @@ def start_password_registration(email, full_name, phone, password, account_type,
             account_type = resolve_account_type(account_type, approved_type)
             existing = conn.execute(
                 text(
-                    f"""SELECT u.id,u.status,e.verified_at
+                    f"""SELECT u.id,u.status,u.account_type,e.verified_at
                     FROM {s}.user_emails e JOIN {s}.app_users u ON u.id=e.app_user_id
                     WHERE lower(e.email::text)=:email FOR UPDATE OF u"""
                 ),
@@ -349,6 +349,11 @@ def start_password_registration(email, full_name, phone, password, account_type,
             ).mappings().first()
             if existing and (existing["verified_at"] or existing["status"] != "PENDING"):
                 raise LinkingRequired("This email is already registered")
+            if existing and existing.get("account_type") and existing["account_type"] != account_type:
+                raise AccountUnavailable(
+                    "This email is already registered for a different account type. "
+                    "Request an account-type change or use a separate email address."
+                )
             user_id = existing["id"] if existing else uuid4()
             status = "PENDING" if verification_required else "ACTIVE"
             if existing:
@@ -566,7 +571,7 @@ def session_profile(user_id):
         row = conn.execute(
             text(
                 f"""SELECT u.id,u.full_name,u.phone,u.date_of_birth,u.country,
-                u.avatar_url,u.user_type,e.email,(e.verified_at IS NOT NULL) email_verified
+                u.avatar_url,u.user_type,u.account_type,e.email,(e.verified_at IS NOT NULL) email_verified
                 FROM {s}.app_users u LEFT JOIN {s}.user_emails e
                   ON e.app_user_id=u.id AND e.is_primary=true
                 WHERE u.id=:id"""
@@ -588,13 +593,18 @@ def start_registration(email, full_name, account_type, invitation_token=None):
         approved_type = admission_type(conn, email, invitation_token)
         account_type = resolve_account_type(account_type, approved_type)
         existing = conn.execute(
-            text(f"""SELECT u.id,u.status,e.verified_at FROM {s}.user_emails e
+            text(f"""SELECT u.id,u.status,u.account_type,e.verified_at FROM {s}.user_emails e
             JOIN {s}.app_users u ON u.id=e.app_user_id
             WHERE lower(e.email::text)=:email FOR UPDATE OF u"""),
             {"email": email},
         ).mappings().first()
         if existing and existing["verified_at"] and existing["status"] == "ACTIVE":
             raise LinkingRequired("This email is already registered")
+        if existing and existing.get("account_type") and existing["account_type"] != account_type:
+            raise AccountUnavailable(
+                "This email is already registered for a different account type. "
+                "Request an account-type change or use a separate email address."
+            )
         if existing:
             user_id = existing["id"]
             conn.execute(

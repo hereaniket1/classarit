@@ -19,7 +19,7 @@ for filename, template, extra in [
     ('organization','workspace.html',{'account_type':'ORGANIZATION'}),
     ('reuse','workspace.html',{'account_type':'ORGANIZATION','business_profile':{'legal_name':'Review Academy'}}),
     ('individual','workspace.html',{'account_type':'INDIVIDUAL'}),
-    ('google-profile','auth/google_profile.html',{'user':{**base['user'],'account_type':None}}),
+    ('google-profile','auth/google_profile.html',{'user':{**base['user'],'account_type':'STUDENT'}}),
 ]:
     (out/(filename+'.html')).write_text(env.get_template(template).render(**(base|extra)), encoding='utf-8')
 print('Rendered eight synthetic pages:', out)

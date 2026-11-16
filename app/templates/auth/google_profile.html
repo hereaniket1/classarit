@@ -15,11 +15,21 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label>Full name<input class="form-control" name="full_name" autocomplete="name" required maxlength="150" value="{{ user.full_name or '' }}"></label>
       <label>Phone number <span class="text-muted">optional</span><input class="form-control" name="phone" type="tel" autocomplete="tel" maxlength="30" value="{{ user.phone or '' }}" placeholder="Add later if you prefer"></label>
-      <label>Account type<select class="form-select" name="account_type" required>
+      <label>Account type
+      {% if user.account_type %}
+        <select class="form-select" name="account_type_display" aria-describedby="account-type-fixed" disabled>
+      {% else %}
+        <select class="form-select" name="account_type" required>
+      {% endif %}
         <option value="" {% if not user.account_type %}selected{% endif %} disabled>Choose account type</option>
         <option value="INDIVIDUAL" {% if user.account_type == 'INDIVIDUAL' %}selected{% endif %}>Individual teacher · one workspace</option>
         <option value="ORGANIZATION" {% if user.account_type == 'ORGANIZATION' %}selected{% endif %}>Organization · up to three workspaces</option><option value="STUDENT" {% if user.account_type == 'STUDENT' %}selected{% endif %}>Student · always free</option>
-      </select></label>
+      </select>
+      {% if user.account_type %}
+        <input type="hidden" name="account_type" value="{{ user.account_type }}">
+        <small id="account-type-fixed" class="text-muted">This account type is fixed for this email. Request a change or use a separate email address.</small>
+      {% endif %}
+      </label>
       <label class="terms-check"><input type="checkbox" name="accepted_terms" value="true" required> I accept the <button type="button" class="terms-link" data-terms-open>Classarit terms and conditions</button></label>
       <button type="submit" class="btn btn-primary">Continue</button>
     </form>

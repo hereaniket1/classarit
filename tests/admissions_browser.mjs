@@ -128,7 +128,8 @@ try {
   await page.locator('#signup-start-form [name=accepted_terms]').check();
   assert.equal(await page.locator('#signup-start-form .control-action-spinner').count(),1);
   await page.goto('http://classarit.test/google-profile');
-  assert.equal(await page.locator('#google-profile-form [name=account_type]').getAttribute('required'),'');
+  assert.equal(await page.locator('#google-profile-form [name=account_type_display]').isDisabled(),true);
+  assert.equal(await page.locator('#google-profile-form [name=account_type]').inputValue(),'STUDENT');
   await page.goto('http://classarit.test/executive');
   await page.getByRole('button',{name:'Reset',exact:true}).click();
   await page.getByRole('button',{name:'Yes',exact:true}).click();
