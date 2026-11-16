@@ -80,3 +80,18 @@
 .agenda-legend{border:0;padding-left:0;margin-bottom:12px}
 @media(prefers-reduced-motion:reduce){.user-dropdown .user-chevron{transition:none}.user-dropdown summary:hover .user-chevron{transform:none}}
 @media(max-width:760px){.agenda-calendar .calendar-day strong{font-size:10px}.agenda-calendar .calendar-head{padding:12px}.agenda-calendar .calendar-day.agenda-day{padding:4px 2px;min-height:68px;height:68px}}
+.calendar-popup-panel{width:min(760px,calc(100vw - 24px));padding:16px 18px}
+.calendar-popup-panel .day-popup-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
+.calendar-popup-panel .day-popup-heading h2{font-size:21px;margin:0;line-height:1.3}
+.day-popup-actions{display:flex;align-items:center;gap:8px}
+.calendar-popup-panel .day-popup-heading .btn-primary{background:#245bff;color:white;border:1px solid #245bff}
+.calendar-popup-panel .day-icon-button{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:34px;height:34px;min-width:34px;min-height:34px;padding:6px;border-radius:8px}
+.calendar-popup-panel .day-icon-button .ui-icon{width:18px;height:18px}
+.calendar-popup-panel .day-popup-close{border:1px solid #dfe6f1;background:white;color:#6a7890}
+.calendar-popup-panel .compact-day-session{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #e8edf6}
+.calendar-popup-panel .compact-day-session:last-child{border-bottom:0}
+.day-session-details{display:flex;align-items:center;gap:16px;flex:1;min-width:0;white-space:nowrap;overflow-x:auto;scrollbar-width:thin;padding:4px 0}
+.day-session-details strong{font-size:14px;flex-shrink:0}.day-session-time{font-size:13px;color:#4a5d78;flex-shrink:0}.day-session-details small{font-size:11px;color:#7b879b;flex-shrink:0}
+.calendar-popup-panel .compact-day-session .row-actions{display:flex;flex-wrap:nowrap;gap:6px;margin:0;flex-shrink:0}
+.calendar-popup-panel .day-empty{margin:12px 0 0;color:#7b879b;font-size:13px}
+@media(max-width:600px){.calendar-popup-panel{padding:12px}.calendar-popup-panel .day-popup-heading h2{font-size:18px}.calendar-popup-panel .day-icon-button{width:40px;height:40px;min-width:40px;min-height:40px}.calendar-popup-panel .compact-day-session{gap:8px;padding:5px 0}.day-session-details{gap:12px}.calendar-popup-panel .compact-day-session .row-actions{gap:4px}}

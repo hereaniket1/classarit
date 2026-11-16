@@ -49,6 +49,14 @@ try {
     await page.locator('[data-calendar-day]').first().click();
     await page.locator('#calendar-popup').waitFor();
     await page.locator('[aria-label="Close day schedule"]').click();
+    await page.locator('.calendar-day').filter({has:page.locator('.day-marker')}).first().click();
+    assert.equal(await page.locator('#calendar-popup .compact-day-session').count(),7);
+    assert.equal(await page.locator('.day-popup-heading [data-calendar-action="session"] svg').count(),1);
+    assert.equal(await page.locator('#calendar-popup [data-calendar-action="reschedule"] svg').count(),7);
+    assert.equal(await page.locator('#calendar-popup [data-calendar-action="cancel"] svg circle').count(),0);
+    assert.ok(await page.locator('#calendar-popup .compact-day-session').first().evaluate(el=>el.getBoundingClientRect().height<70));
+    await page.screenshot({path:path.join(fixture,`day-popup-${width}.png`),fullPage:true});
+    await page.locator('[aria-label="Close day schedule"]').click();
     if(width===1440) {
      const occupied=page.locator('.calendar-day').filter({has:page.locator('.day-marker')}).first();
      assert.equal(await occupied.locator('.day-marker').count(),5);
