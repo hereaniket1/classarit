@@ -300,16 +300,6 @@ document.addEventListener("click", e => {
   });
 }, true);
 
-const userMenu = document.querySelector('#user-dropdown');
-document.addEventListener('click', event => {
-  if (userMenu?.open && !userMenu.contains(event.target)) userMenu.open = false;
-});
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && userMenu?.open) {
-    userMenu.open = false;
-    userMenu.querySelector('summary').focus();
-  }
-});
 const clock = document.querySelector('#workspace-clock');
 if (clock) {
   const formatter = new Intl.DateTimeFormat(undefined, {timeZone:clock.dataset.timezone,weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});

@@ -37,6 +37,19 @@ export function edit(title, fields, save, options = {}) {
   editorLoader();
   document.querySelector("#editor-title").textContent = title;
   const submit = form.querySelector("[type=submit]");
+  form.querySelector('#delete-editor')?.remove();
+  if (options.onDelete) {
+    const remove = document.createElement('button');
+    remove.id = 'delete-editor';
+    remove.type = 'button';
+    remove.className = 'btn btn-link text-danger';
+    remove.textContent = 'Delete';
+    remove.style.marginRight = 'auto';
+    remove.onclick = () => {
+      if (!dialog.classList.contains('is-saving')) options.onDelete();
+    };
+    form.querySelector('footer').prepend(remove);
+  }
   submit.textContent = options.submitLabel || "Save";
   submit.className = `btn ${options.danger ? "btn-danger" : "btn-primary"}`;
   dialog.classList.remove("is-saving");

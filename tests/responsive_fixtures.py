@@ -22,7 +22,7 @@ cards=[card,{**card,'id':'second','name':'Shanatrika','workspace_type':'INSTITUT
 base={'request':None,'user':user,'csrf_token':'fixture-csrf','workspaces':[],'workspace':None,'invitation':None,'teacher_only':False,'google_ready':True,'signup_enabled':True,'email_verification_enabled':True,'display_role':'OWNER','executive_access':False}
 def render(path,template,**extra):
     (output/(path+'.html')).write_text(env.get_template(template).render(**(base|extra)),encoding='utf-8')
-render('owner','account_dashboard.html',appowner=False,owned_workspaces=cards,assigned_workspaces=[],totals={'workspaces':3,'students':54,'classes':3,'active_teachers':3},is_owner=True,can_create=True)
+render('owner','account_dashboard.html',workspaces=cards,appowner=False,owned_workspaces=cards,assigned_workspaces=[],totals={'workspaces':3,'students':54,'classes':3,'active_teachers':3},is_owner=True,can_create=True)
 render('teacher','account_dashboard.html',user={**user,'user_type':'MEMBER'},appowner=False,owned_workspaces=[],assigned_workspaces=[{**w,'roles':['TEACHER'],'can_manage':False,'classes':[{**p,'upcoming_sessions':1}]}],totals={},is_owner=False,can_create=False)
 render('workspace','workspace.html',workspace={**w,'workspace_type':'INSTITUTE'},workspaces=[{**c,'roles':['OWNER','TEACHER']} for c in cards],organization_account=True,owner_view=True,display_role='OWNER',executive_access=False)
 render('onboarding','workspace.html')
@@ -30,6 +30,6 @@ render('invitation','workspace.html',invitation='fixture-token')
 render('home','home.html')
 render('login','login.html')
 render('callback','auth/callback.html',success=False,message='Please try signing in again.')
-render('profile','profile.html',email_verification_enabled=True)
+render('profile','profile.html',workspaces=cards,email_verification_enabled=True)
 (output/'snapshot.json').write_text(json.dumps(snapshot),encoding='utf-8')
 print('Rendered 9 synthetic pages; no database access')

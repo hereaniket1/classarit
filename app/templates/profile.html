@@ -16,25 +16,22 @@
   <script src="/static/loading.js?v=global-loading-20260930" defer></script>
   <script type="module" src="/static/profile.js?v=global-loading-20260930"></script>
   <script src="/static/responsive.js" defer></script>
+  <link rel="stylesheet" href="/static/ui-refresh.css">
+  <script src="/static/user-menu.js" defer></script>
 </head>
 <body>
 <div class="workspace-shell">
   <aside class="workspace-sidebar">
     <a class="workspace-brand" href="/dashboard"><span class="brand-mark">C</span> Classarit</a>
-    <a class="account-profile" href="/dashboard" aria-label="Open main dashboard">
-      <span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span>
-      <span><strong>{{ user.full_name or 'My account' }}</strong><small>{{ display_role }}</small></span>
-    </a>
     <nav aria-label="Account navigation">
       <a class="account-nav" href="/dashboard?overview=1">My dashboard</a>
-      <a class="account-nav active" href="/profile">Profile</a>
+
       {% if executive_access %}<a class="account-nav" href="/executive">Executive dashboard</a>{% endif %}
     </nav>
-    <div class="workspace-footer"><button type="button" id="logout">Log out</button></div>
   </aside>
   <main class="workspace-main account-main profile-main">
     <div id="notice" role="status" aria-live="polite" hidden></div>
-    <header class="section-heading account-heading"><div><h1>My profile</h1><p class="subtext">Your contact profile is shared across every Classarit role.</p></div></header>
+    <header class="section-heading account-heading"><div><h1>My profile</h1><p class="subtext">Your contact profile is shared across every Classarit role.</p></div>{% include "components/user_menu.html" %}</header>
     <div class="profile-grid">
       <section class="workspace-card profile-card" id="profile-details-card">
         <div class="section-heading"><h2>Personal details</h2></div>

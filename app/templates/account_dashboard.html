@@ -15,22 +15,19 @@
   <script src="/static/loading.js?v=global-loading-20260930" defer></script>
   <script type="module" src="/static/account-dashboard.js?v=global-loading-20260930"></script>
   <script src="/static/responsive.js" defer></script>
+  <link rel="stylesheet" href="/static/ui-refresh.css">
+  <script src="/static/user-menu.js" defer></script>
 </head>
 <body>
 <div class="workspace-shell">
   <aside class="workspace-sidebar">
     <a class="workspace-brand" href="/dashboard"><span class="brand-mark">C</span> Classarit</a>
-    <a class="account-profile" href="/dashboard" aria-label="Open main dashboard">
-      <span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span>
-      <span><strong>{{ user.full_name or 'My account' }}</strong><small>{{ display_role }}</small></span>
-    </a>
-    <nav aria-label="Account navigation"><a class="account-nav active" href="/dashboard">My dashboard</a><a class="account-nav" href="/profile">Profile</a>{% if executive_access %}<a class="account-nav" href="/executive">Executive dashboard</a>{% endif %}</nav>
-    <div class="workspace-footer"><button type="button" id="logout">Log out</button></div>
+    <nav aria-label="Account navigation"><a class="account-nav" href="/dashboard">My dashboard</a></nav>
   </aside>
   <main class="workspace-main account-main">
     <div id="notice" role="status" aria-live="polite" hidden></div>
     {% if appowner %}
-      <header><p class="eyebrow">APPOWNER</p><h1>Product performance</h1></header>
+      <header class="section-heading account-heading"><h1>Product performance</h1>{% include "components/user_menu.html" %}</header>
       <section class="workspace-card"><h2>Coming later</h2><p>This dedicated account is reserved for Classarit product performance. The product analytics dashboard will be added in a later release.</p></section>
     {% else %}
       <header class="section-heading account-heading">
@@ -38,6 +35,7 @@
         <h1>{{ 'Overview' if is_owner else ('Welcome' if can_create and not has_workspace_context else 'My classes') }}</h1>
         {% if user.account_type %}<span class="workspace-kind">{{ 'Organization · up to 3 workspaces' if user.account_type == 'ORGANIZATION' else 'Individual · 1 workspace' }}</span>{% endif %}
         {% if can_create and owned_workspaces %}<a class="btn btn-primary" href="/workspaces/new">Add workspace</a>{% endif %}
+        {% include "components/user_menu.html" %}
       </header>
       {% if is_owner %}
       <div class="metric-grid account-metrics">

@@ -16,21 +16,18 @@
   <script src="/static/loading.js?v=global-loading-20260930" defer></script>
   <script type="module" src="/static/executive.js?v=global-loading-20260930"></script>
   <script type="module" src="/static/executive-admissions.js"></script>
+  <link rel="stylesheet" href="/static/ui-refresh.css">
+  <script src="/static/user-menu.js" defer></script>
 </head>
 <body>
 <div class="workspace-shell executive-shell">
   <aside class="workspace-sidebar">
     <a class="workspace-brand" href="/dashboard"><span class="brand-mark">C</span> Classarit</a>
-    <a class="account-profile" href="/dashboard" aria-label="Open main dashboard">
-      <span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span>
-      <span><strong>{{ user.full_name or 'Executive' }}</strong><small>EXECUTIVE</small></span>
-    </a>
-    <nav aria-label="Executive navigation"><a class="account-nav active" href="/executive">Product dashboard</a><a class="account-nav" href="/profile">Profile</a></nav>
-    <div class="workspace-footer"><button type="button" id="logout">Log out</button></div>
+    <nav aria-label="Executive navigation"><a class="account-nav active" href="/executive">Product dashboard</a></nav>
   </aside>
   <main class="workspace-main executive-main">
     <div id="notice" role="status" aria-live="polite" hidden></div>
-    <header class="section-heading account-heading"><h1>Executive dashboard</h1><a class="btn btn-outline-primary" href="/dashboard?overview=1">Business dashboard</a></header>
+    <header class="section-heading account-heading"><h1>Executive dashboard</h1><a class="btn btn-outline-primary" href="/dashboard?overview=1">Business dashboard</a>{% include "components/user_menu.html" %}</header>
     <section class="metric-grid executive-metrics" id="registration-metrics" aria-label="Registration metrics"></section>
     <section class="workspace-card executive-card" id="executive-settings-card">
       <div class="section-heading"><h2>Product controls</h2><p class="subtext">Changes apply immediately.</p></div>

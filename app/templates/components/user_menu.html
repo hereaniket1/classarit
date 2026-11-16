@@ -1,0 +1,21 @@
+<details class="user-dropdown" id="user-dropdown">
+              <summary><span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span><span class="user-menu-name">{{ user.full_name or 'My account' }}</span><svg class="user-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary>
+              <div class="user-dropdown-panel">
+                <div class="user-menu-heading"><div><strong>{{ user.full_name or 'My account' }}</strong><small>{{ display_role|default(user.user_type or 'MEMBER', true) }}</small></div><a href="/profile" class="edit-profile-link">Edit profile</a></div>
+                <div class="user-workspace-controls">
+              {% if organization_account or user.account_type == 'ORGANIZATION' %}
+              <a class="btn btn-sm btn-outline-primary" href="/dashboard?overview=1">Manage workspaces</a>
+              {% if workspaces %}<label class="workspace-picker"><span>Switch workspace</span>
+                {{ icon('workspaces') }}
+                <select id="workspace-picker" aria-label="Switch workspace" title="Switch workspace">
+                  {% if not workspace %}<option value="" selected disabled>Choose workspace</option>{% endif %}
+                  {% for choice in workspaces %}
+                  <option value="{{ choice.id }}" {{ 'selected' if workspace and choice.id|string == workspace.id|string else '' }}>{{ choice.name }}</option>
+                  {% endfor %}
+                </select>
+              </label>{% endif %}
+              {% endif %}
+                </div>
+                <button type="button" id="logout">Log out</button>
+              </div>
+            </details>

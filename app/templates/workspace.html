@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="/static/workspace-compact.css?v=password-profile-20260917">
     <link rel="stylesheet" href="/static/theme.css?v=landing-theme-20260930">
 <link rel="stylesheet" href="/static/ui-refresh.css">
+  <script src="/static/user-menu.js" defer></script>
 </head>
   <body
     data-workspace="{{ workspace.id if workspace else '' }}"
@@ -67,26 +68,7 @@
           {% endif %}
             </div>
             {% if workspace %}<time id="workspace-clock" data-timezone="{{ workspace.timezone }}"></time>{% endif %}</div>
-            <details class="user-dropdown" id="user-dropdown">
-              <summary><span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span><span class="user-menu-name">{{ user.full_name or 'My account' }}</span><svg class="user-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary>
-              <div class="user-dropdown-panel">
-                <div class="user-menu-heading"><div><strong>{{ user.full_name or 'My account' }}</strong><small>{{ display_role }}</small></div><a href="/profile" class="edit-profile-link">Edit profile</a></div>
-                {% if workspace %}<div class="user-workspace-controls">
-              {% if organization_account %}
-              <a class="btn btn-sm btn-outline-primary" href="/dashboard?overview=1">Manage workspaces</a>
-              <label class="workspace-picker"><span>Switch workspace</span>
-                {{ icon('workspaces') }}
-                <select id="workspace-picker" aria-label="Switch workspace" title="Switch workspace">
-                  {% for choice in workspaces %}
-                  <option value="{{ choice.id }}" {{ 'selected' if choice.id|string == workspace.id|string else '' }}>{{ choice.name }}</option>
-                  {% endfor %}
-                </select>
-              </label>
-              {% endif %}
-                </div>{% endif %}
-                <button type="button" id="logout">Log out</button>
-              </div>
-            </details>
+            {% include "components/user_menu.html" %}
           </div>
 
         </header>

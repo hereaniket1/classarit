@@ -435,7 +435,7 @@ export function action(s, key, id, refresh, context = {}) {
   if (key === "reschedule") {
     const ss = s.sessions.find((x) => x.id === id);
     edit(
-      "Reschedule session",
+      "Edit schedule",
       [
         f("starts_at", `Start (${s.workspace.timezone})`, "datetime-local", {
           value: local(ss.starts_at),
@@ -448,6 +448,7 @@ export function action(s, key, id, refresh, context = {}) {
         ...deliveryFields("", ss),
       ],
       save(`/sessions/${id}`, "PATCH"),
+      { onDelete: () => action(s, "delete-session", id, refresh) },
     );
   }
   if (key === "event")

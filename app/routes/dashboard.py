@@ -90,6 +90,7 @@ def dashboard(
             request,
             user,
             appowner=False,
+            workspaces=choices,
             display_role=role_label(db, user, choices),
             **dashboard_data(db, user, choices=choices),
         ),
@@ -109,6 +110,7 @@ def profile(
             request,
             user,
             display_role=role_label(db, user, choices),
+            workspaces=choices,
             email_verification_enabled=setting_enabled(
                 "email_verification_enabled", True
             ),

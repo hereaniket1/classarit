@@ -28,7 +28,7 @@ try {
    snapshot.calendar={month:url.searchParams.get('month')||new Date().toISOString().slice(0,7),sessions:snapshot.sessions};
    return route.fulfill({contentType:'application/json',body:JSON.stringify(snapshot)});
   }
-  const file=url.pathname.startsWith('/static/')?path.join(root,'app',url.pathname):path.join(fixture,'workspace.html');
+  const file=url.pathname.startsWith('/static/')?path.join(root,'app',url.pathname):path.join(fixture,url.pathname==='/dashboard'?'owner.html':url.pathname==='/profile'?'profile.html':'workspace.html');
   return route.fulfill({body:await fs.readFile(file),contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});
  });
  await page.goto('http://classarit.test/workspace');
@@ -58,7 +58,7 @@ try {
     assert.equal(await page.locator('#calendar-popup .compact-day-session').count(),7);
     assert.equal(await page.locator('.day-popup-heading [data-calendar-action="session"] svg').count(),1);
     assert.equal(await page.locator('#calendar-popup [data-calendar-action="reschedule"] svg').count(),7);
-    assert.equal(await page.locator('#calendar-popup [data-calendar-action="cancel"] svg circle').count(),0);
+    assert.equal(await page.locator('#calendar-popup [data-calendar-action="cancel"]').count(),0);
     assert.ok(await page.locator('#calendar-popup .compact-day-session').first().evaluate(el=>el.getBoundingClientRect().height<70));
     await page.screenshot({path:path.join(fixture,`day-popup-${width}.png`),fullPage:true});
     await page.locator('[aria-label="Close day schedule"]').click();
@@ -69,10 +69,15 @@ try {
      await page.locator('.calendar-day').filter({has:page.locator('.day-marker')}).first().click();
      assert.equal(await page.locator('#calendar-popup .day-session').count(),7);
      const before=referenceLoads;
-     await page.locator('[data-calendar-action="cancel"]').first().click();
+     await page.locator('[data-calendar-action="reschedule"]').first().click();
      await page.waitForFunction(()=>document.querySelector('#editor').open);
      assert.equal(referenceLoads,before+1);
-     assert.equal(await page.locator('#editor [name="grant_makeups"]').count(),1);
+     await page.locator('#delete-editor').waitFor();
+     assert.equal(await page.locator('#editor footer button').count(),3);
+     await page.locator('#delete-editor').click();
+     assert.equal(await page.locator('#editor-title').textContent(),'Delete schedule');
+     assert.equal(await page.locator('#delete-editor').count(),0);
+     assert.equal(await page.locator('#editor button[type=submit]').textContent(),'Delete');
      await page.locator('#cancel-editor').click();
     }
    } else assert.equal(await page.locator('.agenda-day').count(),7);
@@ -147,6 +152,17 @@ try {
  await page.locator('.agenda-week [data-calendar-day]').last().click();
  await page.locator('#calendar-popup').waitFor();
  await page.locator('[aria-label="Close day schedule"]').click();
+ for (const route of ['/dashboard?overview=1','/profile']) {
+  await page.goto(`http://classarit.test${route}`);
+  assert.equal(await page.locator('.workspace-sidebar #logout, .workspace-sidebar a[href="/profile"], .workspace-sidebar .account-profile').count(),0);
+  if (route.startsWith('/dashboard')) assert.equal(await page.locator('.workspace-sidebar a[href="/executive"]').count(),0);
+  await page.locator('#user-dropdown summary').click();
+  assert.equal(await page.locator('.user-menu-heading a[href="/profile"]').textContent(),'Edit profile');
+  assert.equal(await page.locator('.user-dropdown-panel > :last-child').getAttribute('id'),'logout');
+  assert.equal(await page.locator('#workspace-picker option').count(),4);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#user-dropdown').getAttribute('open'),null);
+ }
  assert.deepEqual(errors,[]);
  console.log('Passed: workspace section navigation, failed load retry, failed save cleanup and successful save retry.');
 } finally {await browser.close();}
