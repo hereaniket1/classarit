@@ -35,11 +35,27 @@ def search_students(q: str = Query('', max_length=150), a=Depends(access)):
     term = q.strip()
     if len(term) < 2:
         return {'students': []}
-    return {'students': a.db.all("""SELECT id,full_name,email,phone
-        FROM {s}.students
-        WHERE workspace_id=:w AND status='ACTIVE'
-          AND (full_name ILIKE :q OR COALESCE(email,'') ILIKE :q)
-        ORDER BY lower(full_name),id LIMIT 20""", w=a.id, q=f'%{term}%')}
+    return {'students': a.db.all("""WITH known_students AS (
+        SELECT st.id,st.full_name,st.email,st.phone,w.name AS workspace_name,
+               CASE WHEN st.workspace_id=:w THEN 0 ELSE 1 END AS scope_rank
+        FROM {s}.students st
+        JOIN {s}.workspaces w ON w.id=st.workspace_id AND w.status='ACTIVE'
+        WHERE st.status='ACTIVE'
+          AND (st.full_name ILIKE :q OR COALESCE(st.email,'') ILIKE :q)
+    ), verified_student_accounts AS (
+        SELECT NULL::uuid AS id,u.full_name,e.email,u.phone,NULL::text AS workspace_name,2 AS scope_rank
+        FROM {s}.app_users u
+        JOIN {s}.user_emails e ON e.app_user_id=u.id AND e.is_primary=true AND e.verified_at IS NOT NULL
+        WHERE u.status='ACTIVE' AND u.account_type='STUDENT'
+          AND (u.full_name ILIKE :q OR e.email::text ILIKE :q)
+          AND NOT EXISTS (
+            SELECT 1 FROM {s}.students st
+            WHERE st.linked_user_id=u.id AND st.status='ACTIVE'
+          )
+    )
+    SELECT id,full_name,email,phone,workspace_name
+    FROM (SELECT * FROM known_students UNION ALL SELECT * FROM verified_student_accounts) matches
+    ORDER BY scope_rank,lower(full_name),id NULLS LAST LIMIT 20""", w=a.id, q=f'%{term}%')}
 
 
 @router.put('/programs/{program_id}/discovery')

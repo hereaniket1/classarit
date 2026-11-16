@@ -22,7 +22,8 @@ class StudentLookupTests(unittest.TestCase):
         query = self.db.all.call_args.args[0]
         self.assertIn("status='ACTIVE'", query)
         self.assertIn('full_name ILIKE :q', query)
-        self.assertIn("COALESCE(email,'') ILIKE :q", query)
+        self.assertIn("COALESCE(st.email,'') ILIKE :q", query)
+        self.assertIn("e.email::text ILIKE :q", query)
         self.assertEqual(self.db.all.call_args.kwargs['w'], self.access.id)
         self.assertEqual(self.db.all.call_args.kwargs['q'], '%Asha%')
 
