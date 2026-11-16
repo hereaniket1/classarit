@@ -18,6 +18,7 @@ try {
   if(url.pathname.startsWith('/api/')) {
    if(route.request().method()!=='GET') return route.fulfill({status:failSave?503:200,contentType:'application/json',body:JSON.stringify(failSave?{detail:'Simulated save failure'}:{id:'saved'})});
    if(failSection) return route.fulfill({status:503,contentType:'text/html',body:'Unavailable'});
+   if(url.pathname.endsWith('/students/search')) return route.fulfill({contentType:'application/json',body:JSON.stringify({students:[{id:'existing-student',full_name:'Existing Student',email:'existing@example.com',phone:'+91 9000000000'}]})});
    const snapshot=JSON.parse(await fs.readFile(path.join(fixture,'snapshot.json')));
    if(url.pathname.endsWith('/action-refs')) referenceLoads++;
    if(url.pathname.endsWith('/calendar')) {
@@ -156,6 +157,11 @@ try {
  await page.locator('[data-tab="classes"]').click();
  await page.locator('[data-action="class-student"]').first().click();
  await page.getByRole('heading',{name:'Add student to class',exact:true}).waitFor();
+ await page.locator('#editor-form [name="student_search"]').fill('existing');
+ await page.getByRole('option',{name:'Existing Student · existing@example.com'}).waitFor();
+ await page.getByRole('option',{name:'Existing Student · existing@example.com'}).click();
+ assert.equal(await page.locator('#editor-form [name="full_name"]').inputValue(),'Existing Student');
+ assert.equal(await page.locator('#editor-form [name="email"]').inputValue(),'existing@example.com');
  await page.locator('#editor-form [name="email"]').fill('student@example.com');
  await page.locator('#editor-form button').filter({hasText:'Cancel'}).click();
  await page.locator('[data-action="discovery"]').first().click();

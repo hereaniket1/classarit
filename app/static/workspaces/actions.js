@@ -198,6 +198,43 @@ export function action(s, key, id, refresh, context = {}) {
     ];
   const selectedProgram = (programId) =>
     s.programs.find((p) => p.id === programId) || s.programs[0] || {};
+  const attachStudentLookup = () => {
+    const search = document.querySelector('#editor-form [name="student_search"]');
+    const nameField = document.querySelector('#editor-form [name="full_name"]');
+    const emailField = document.querySelector('#editor-form [name="email"]');
+    if (!search || !nameField || !emailField || !s.workspace?.id) return;
+    const results = document.createElement('div');
+    results.className = 'student-lookup-results';
+    results.setAttribute('role', 'listbox');
+    search.closest('label')?.after(results);
+    let requestVersion = 0;
+    search.addEventListener('input', async () => {
+      const term = search.value.trim();
+      const version = ++requestVersion;
+      results.replaceChildren();
+      if (term.length < 2) return;
+      try {
+        const data = await api(`/students/search?q=${encodeURIComponent(term)}`);
+        if (version !== requestVersion) return;
+        for (const student of data.students || []) {
+          const option = document.createElement('button');
+          option.type = 'button';
+          option.className = 'student-lookup-option';
+          option.setAttribute('role', 'option');
+          option.textContent = `${student.full_name} · ${student.email || 'No email'}`;
+          option.addEventListener('click', () => {
+            nameField.value = student.full_name || '';
+            emailField.value = student.email || '';
+            const phoneField = document.querySelector('#editor-form [name="phone"]');
+            if (phoneField && student.phone) phoneField.value = student.phone;
+            search.value = `${student.full_name} · ${student.email || 'No email'}`;
+            results.replaceChildren();
+          });
+          results.append(option);
+        }
+      } catch { /* The normal form remains usable when lookup is unavailable. */ }
+    });
+  };
   if (key === "student" || key === "edit-student") {
     const st = s.students.find((x) => x.id === id) || {};
     const g =
@@ -209,6 +246,7 @@ export function action(s, key, id, refresh, context = {}) {
     edit(
       id ? "Edit student" : "Add student",
       [
+        ...(id ? [] : [f("student_search", "Search existing student by name or email")]),
         f("full_name", "Full name", "text", { required: true }),
         f("date_of_birth", "Date of birth", "date"),
         f("email", "Email", "email"),
@@ -227,8 +265,12 @@ export function action(s, key, id, refresh, context = {}) {
             ]
           : st[field.name],
       })),
-      save(id ? `/students/${id}` : "/students", id ? "PATCH" : "POST"),
+      save(id ? `/students/${id}` : "/students", id ? "PATCH" : "POST", (data) => {
+        delete data.student_search;
+        return data;
+      }),
     );
+    if (!id) attachStudentLookup();
   }
   if (key === "venue")
     edit(
@@ -294,7 +336,8 @@ export function action(s, key, id, refresh, context = {}) {
       save(`/enrollments/${id}/end`),
     );
   if (key === "class-student")
-    edit("Add student to class", [f("full_name", "Student name", "text", {required:true}), f("email", "Student email (used to link their account)", "email", {required:true}), f("phone", "Phone (optional)", "tel"), f("starts_on", "Start date", "date", {value:today,required:true})], save(`/programs/${id}/student-enrollment`));
+    edit("Add student to class", [f("student_search", "Search existing student by name or email"), f("full_name", "Student name", "text", {required:true}), f("email", "Student email (used to link their account)", "email", {required:true}), f("phone", "Phone (optional)", "tel"), f("starts_on", "Start date", "date", {value:today,required:true})], save(`/programs/${id}/student-enrollment`, "POST", (data) => { delete data.student_search; return data; }));
+  if (key === "class-student") attachStudentLookup();
   if (key === "discovery")
     edit("Student search", [f("student_discoverable", "Show this class in student search and allow direct enrollment", "checkbox", {value:selectedProgram(id).student_discoverable}), f("discovery_note", "Students can join this course directly when seats are available. Class details, teacher names and venue address will be visible to student accounts.", "note")], save(`/programs/${id}/discovery`, "PUT"));
   if (key === "enroll")

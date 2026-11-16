@@ -1,5 +1,5 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, Query
 from ..access import access
 from ..schemas import (
     ActivityInput,
@@ -27,6 +27,19 @@ class ClassStudentInput(BaseModel):
     email: str = Field(max_length=254, pattern=r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
     phone: str | None = None
     starts_on: date
+
+
+@router.get('/students/search')
+def search_students(q: str = Query('', max_length=150), a=Depends(access)):
+    """Return minimal active-student matches for staff lookup fields."""
+    term = q.strip()
+    if len(term) < 2:
+        return {'students': []}
+    return {'students': a.db.all("""SELECT id,full_name,email,phone
+        FROM {s}.students
+        WHERE workspace_id=:w AND status='ACTIVE'
+          AND (full_name ILIKE :q OR COALESCE(email,'') ILIKE :q)
+        ORDER BY lower(full_name),id LIMIT 20""", w=a.id, q=f'%{term}%')}
 
 
 @router.put('/programs/{program_id}/discovery')

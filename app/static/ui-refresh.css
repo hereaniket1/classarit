@@ -70,6 +70,7 @@
 .user-dropdown[open] .user-chevron{transform:rotate(180deg)}
 .user-menu-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.edit-profile-link{font-size:12px;white-space:nowrap;color:#245bff;text-decoration:none}
 .user-dropdown-panel>#logout{border-top:1px solid #e6ecf5;border-radius:0;margin-top:12px;padding-top:14px;color:#b43b49}
+.student-lookup-results{display:grid;gap:4px;margin:-4px 0 10px}.student-lookup-option{border:1px solid #dce5f4;background:#f8fbff;border-radius:8px;padding:8px 10px;text-align:left;color:#253754;font-size:13px;cursor:pointer}.student-lookup-option:hover,.student-lookup-option:focus{background:#eaf1ff;border-color:#245bff}
 .agenda-calendar.workspace-card{padding:0;overflow:hidden;margin-bottom:24px}
 .agenda-calendar .calendar-head h2{font-size:18px;margin:0}.agenda-calendar .calendar-head>small{font-size:11px;color:#78879c}
 .agenda-calendar.agenda-week{display:block}
