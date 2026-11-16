@@ -18,7 +18,7 @@
       <label>Account type<select class="form-select" name="account_type" required>
         <option value="" {% if not user.account_type %}selected{% endif %} disabled>Choose account type</option>
         <option value="INDIVIDUAL" {% if user.account_type == 'INDIVIDUAL' %}selected{% endif %}>Individual teacher · one workspace</option>
-        <option value="ORGANIZATION" {% if user.account_type == 'ORGANIZATION' %}selected{% endif %}>Organization · up to three workspaces</option>
+        <option value="ORGANIZATION" {% if user.account_type == 'ORGANIZATION' %}selected{% endif %}>Organization · up to three workspaces</option><option value="STUDENT" {% if user.account_type == 'STUDENT' %}selected{% endif %}>Student · always free</option>
       </select></label>
       <label class="terms-check"><input type="checkbox" name="accepted_terms" value="true" required> I accept the <button type="button" class="terms-link" data-terms-open>Classarit terms and conditions</button></label>
       <button type="submit" class="btn btn-primary">Continue</button>

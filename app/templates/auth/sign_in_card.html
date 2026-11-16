@@ -23,7 +23,7 @@
         <label>Full name<input class="form-control" name="full_name" autocomplete="name" required maxlength="150"></label>
         <label>Email<input class="form-control" name="email" type="email" autocomplete="email" required maxlength="254"></label>
         <label>Country<select class="form-select" name="country" required><option value="IN">India</option><option value="US">United States</option><option value="GB">United Kingdom</option><option value="CA">Canada</option><option value="AU">Australia</option><option value="AE">United Arab Emirates</option><option value="SG">Singapore</option></select></label>
-        <label>I will use Classarit as<select class="form-select" name="usage_type" required><option value="INDIVIDUAL">Individual teacher · one workspace</option><option value="ORGANIZATION">Organization · up to three workspaces</option></select></label>
+        <label>I will use Classarit as<select class="form-select" name="usage_type" required><option value="INDIVIDUAL">Individual teacher · one workspace</option><option value="ORGANIZATION">Organization · up to three workspaces</option><option value="STUDENT" >Student · always free</option></select></label>
         <button type="submit" class="btn btn-primary">Request invitation</button>
         <p id="invitation-request-status" role="status" aria-live="polite"></p>
       </form>
@@ -44,7 +44,7 @@
         <label>Full name<input class="form-control" name="full_name" autocomplete="name" required maxlength="150"></label>
         <label>Phone number<input class="form-control" name="phone" type="tel" autocomplete="tel" required minlength="5" maxlength="30"></label>
         <label>Email<input class="form-control" name="email" type="email" autocomplete="email" required maxlength="254"></label>
-        <label>Account type<select class="form-select" name="account_type" required><option value="" selected disabled>Choose account type</option><option value="INDIVIDUAL">Individual teacher · one workspace</option><option value="ORGANIZATION">Organization · up to three workspaces</option></select></label>
+        <label>Account type<select class="form-select" name="account_type" required><option value="" selected disabled>Choose account type</option><option value="INDIVIDUAL">Individual teacher · one workspace</option><option value="ORGANIZATION">Organization · up to three workspaces</option><option value="STUDENT" >Student · always free</option></select></label>
         <label>Password<input class="form-control" name="password" type="password" autocomplete="new-password" required minlength="10" maxlength="128"></label>
         <p class="password-help">Use at least 10 characters. You can add birth date and country later from Profile.</p>
         <label class="terms-check"><input type="checkbox" name="accepted_terms" value="true" required> I accept the <button type="button" class="terms-link" data-terms-open>Classarit terms and conditions</button></label>

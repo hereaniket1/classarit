@@ -60,11 +60,11 @@ try {
   const form=page.locator('#invitation-request-form');
   await form.locator('[name=full_name]').fill('Review Applicant');
   await form.locator('[name=email]').fill('review@example.com');
-  await form.locator('[name=usage_type]').selectOption('ORGANIZATION');
+  await form.locator('[name=usage_type]').selectOption('STUDENT');
   await form.locator('button').click();
   assert.equal(await form.locator('button .action-spinner').count(),1);
   await page.locator('#invitation-verify-form').waitFor();
-  assert.equal(requests.find(r=>r.url==='/auth/invitation-requests').payload.usage_type,'ORGANIZATION');
+  assert.equal(requests.find(r=>r.url==='/auth/invitation-requests').payload.usage_type,'STUDENT');
   await page.locator('#invitation-verify-form [name=code]').fill('123456');
   await page.locator('#invitation-verify-form button[type=submit]').click();
   await page.locator('.global-page-loader.is-operation-lock').waitFor();
@@ -124,7 +124,7 @@ try {
   await page.locator('#sign-in').getByRole('button',{name:'Create an account',exact:true}).click();
   assert.equal(await page.locator('#signup-panel').isVisible(),true);
   assert.equal(await page.locator('#signup-start-form [name=account_type]').getAttribute('required'),'');
-  assert.equal(await page.locator('#signup-start-form [name=account_type] option').count(),3);
+  assert.equal(await page.locator('#signup-start-form [name=account_type] option').count(),4);
   await page.locator('#signup-start-form [name=accepted_terms]').check();
   assert.equal(await page.locator('#signup-start-form .control-action-spinner').count(),1);
   await page.goto('http://classarit.test/google-profile');

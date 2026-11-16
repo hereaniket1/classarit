@@ -1502,3 +1502,35 @@ Sessions spanning midnight appear on each occupied day; an exact midnight end
 does not occupy the following day. Free means no scheduled classes, not a
 configured working-hours availability guarantee. The calendar API uses the existing
 workspace authorization; recurring-series grouping needs migration 004.
+
+
+## Student portal (first version)
+
+Apply `python setup/apply_migration.py 020_student_portal.sql` before deploying this version.
+Student is an account type in password signup, Google profile completion and the existing
+invitation request / OTP / approval flow. Invitation-only mode continues to gate new
+student accounts; open signup permits normal registration. Students land at `/student`.
+
+Enrollment requires a verified email to link student records safely. Student profile email
+verification remains available even when optional email verification is disabled globally.
+
+Student accounts are always free in Classarit. They can search listed courses by class or
+organization name, venue/address and online/in-person/hybrid delivery, then enroll directly.
+There is no teacher approval-request inbox in this version. Enrollment respects class and
+session capacity, books future sessions and appears in the existing staff roster. Students
+only receive their linked upcoming sessions and their own enrollments, including those
+added by staff using their verified email. A class meeting link is available only after
+booking. No workspace membership is created, and student accounts cannot manage workspaces,
+classes, venues or schedules. Personal study calendars are deferred.
+
+Existing classes remain private. Owners/managers can select the student-search checkbox in
+the class editor. Assigned teachers and managers can also use **List in student search** and
+**Add student** beside a course in Classes. Listing publishes the course description, teacher
+names and venue address to signed-in students, and enables immediate self-enrollment.
+Events do not support self-enrollment in this version. Class tuition/payment processing is
+not part of the student portal.
+
+Verification: `python -m unittest tests.test_student_portal`,
+`node tests/student_portal_browser.mjs` (after generating responsive fixtures), and the
+explicit database smoke test `python tests/student_portal_db_smoke.py`. The latter creates
+synthetic records within a transaction and always rolls back without sending emails.

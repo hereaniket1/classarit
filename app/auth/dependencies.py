@@ -42,6 +42,8 @@ def require_user(request: Request):
 
 def require_legacy_user(request: Request):
     user = require_user(request)
+    if user.get("account_type") == "STUDENT":
+        raise HTTPException(403, "Use your student dashboard.")
     if user.get("user_type") == "MEMBER":
         from .database import auth_engine, schema_name
         from sqlalchemy import text

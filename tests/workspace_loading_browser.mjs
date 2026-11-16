@@ -152,6 +152,16 @@ try {
  await page.locator('.agenda-week [data-calendar-day]').last().click();
  await page.locator('#calendar-popup').waitFor();
  await page.locator('[aria-label="Close day schedule"]').click();
+ if ((await page.viewportSize()).width<800) await page.locator('.nav-toggle').click();
+ await page.locator('[data-tab="classes"]').click();
+ await page.locator('[data-action="class-student"]').first().click();
+ await page.getByRole('heading',{name:'Add student to class',exact:true}).waitFor();
+ await page.locator('#editor-form [name="email"]').fill('student@example.com');
+ await page.locator('#editor-form button').filter({hasText:'Cancel'}).click();
+ await page.locator('[data-action="discovery"]').first().click();
+ await page.getByRole('heading',{name:'Student search',exact:true}).waitFor();
+ assert.equal(await page.locator('#editor-form [name="student_discoverable"]').count(),1);
+ await page.locator('#editor-form button').filter({hasText:'Cancel'}).click();
  for (const route of ['/dashboard?overview=1','/profile']) {
   await page.goto(`http://classarit.test${route}`);
   assert.equal(await page.locator('.workspace-sidebar #logout, .workspace-sidebar a[href="/profile"], .workspace-sidebar .account-profile').count(),0);

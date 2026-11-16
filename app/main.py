@@ -19,6 +19,7 @@ from .routes.public import router as public_router
 from .routes.dashboard import router as dashboard_router
 from .routes.executive import router as executive_router
 from .routes.admissions import router as admissions_router
+from .routes.student import router as student_router
 from .workspaces.routes import router as workspace_router
 from .routes.teaching import router as teaching_router
 from .config import PROJECT_DIR, UPLOAD_DIR
@@ -58,6 +59,7 @@ app.mount('/static', StaticFiles(directory=PROJECT_DIR / 'app' / 'static'), name
 app.include_router(public_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
+app.include_router(student_router)
 app.include_router(executive_router)
 app.include_router(admissions_router)
 app.include_router(teaching_router)
@@ -66,7 +68,7 @@ app.include_router(workspace_router)
 
 @app.exception_handler(HTTPException)
 async def auth_errors(request: Request, exc: HTTPException):
-    if exc.status_code == 401 and (request.url.path in ('/dashboard','/legacy/dashboard','/executive','/profile') or request.url.path.startswith('/workspaces/')):
+    if exc.status_code == 401 and (request.url.path in ('/student','/dashboard','/legacy/dashboard','/executive','/profile') or request.url.path.startswith('/workspaces/')):
         return RedirectResponse('/login',status_code=303)
     return JSONResponse({'detail':exc.detail},status_code=exc.status_code,headers=exc.headers)
 
@@ -79,7 +81,7 @@ async def private_responses(request: Request, call_next):
     if request.url.path.startswith('/static/'):
         # Keep ETag/Last-Modified validation so changed assets update on refresh.
         response.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
-    elif request.url.path.startswith(('/auth/', '/api/', '/uploads/', '/dashboard', '/login', '/profile', '/workspaces/', '/invitations/', '/invitation-review/', '/legacy/', '/executive')):
+    elif request.url.path.startswith(('/auth/', '/api/', '/uploads/', '/student', '/dashboard', '/login', '/profile', '/workspaces/', '/invitations/', '/invitation-review/', '/legacy/', '/executive')):
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'

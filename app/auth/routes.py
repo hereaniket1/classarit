@@ -26,7 +26,7 @@ oauth = OAuth()
 class RegistrationStart(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
     email: str = Field(min_length=3, max_length=254)
-    account_type: Literal['INDIVIDUAL', 'ORGANIZATION']
+    account_type: Literal['INDIVIDUAL', 'ORGANIZATION', 'STUDENT']
     accepted_terms: bool = False
 
 
@@ -39,7 +39,7 @@ class PasswordRegistration(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
     phone: str = Field(min_length=5, max_length=30)
     email: str = Field(min_length=3, max_length=254)
-    account_type: Literal['INDIVIDUAL', 'ORGANIZATION']
+    account_type: Literal['INDIVIDUAL', 'ORGANIZATION', 'STUDENT']
     password: str = Field(min_length=10, max_length=128)
     accepted_terms: bool = False
 
@@ -51,7 +51,7 @@ class TermsAcceptance(BaseModel):
 class GoogleProfileCompletion(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
     phone: str | None = Field(default=None, max_length=30)
-    account_type: Literal['INDIVIDUAL', 'ORGANIZATION']
+    account_type: Literal['INDIVIDUAL', 'ORGANIZATION', 'STUDENT']
     accepted_terms: bool = False
 
 

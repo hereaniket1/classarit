@@ -1,0 +1,45 @@
+{% from "components/icons.html" import icon %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Student dashboard · Classarit</title>
+  <link rel="stylesheet" href="/static/vendor/bootstrap/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/workspace.css">
+  <link rel="stylesheet" href="/static/account-dashboard.css"><link rel="stylesheet" href="/static/responsive.css?v=global-loading-20260930">
+  <link rel="stylesheet" href="/static/theme.css?v=landing-theme-20260930"><link rel="stylesheet" href="/static/ui-refresh.css">
+  <link rel="stylesheet" href="/static/student.css">
+  <script src="/static/loading.js?v=global-loading-20260930" defer></script>
+  <script src="/static/responsive.js" defer></script><script src="/static/user-menu.js" defer></script>
+  <script type="module" src="/static/student.js"></script>
+</head>
+<body><div class="workspace-shell">
+  <aside class="workspace-sidebar">
+    <a class="workspace-brand" href="/student"><span class="brand-mark">C</span> Classarit</a>
+    <nav aria-label="Student navigation">
+      <a class="account-nav" href="#upcoming">Upcoming classes</a>
+      <a class="account-nav" href="#discover">Find classes</a>
+    </nav>
+  </aside>
+  <main class="workspace-main account-main">
+    <header class="section-heading account-heading"><div><h1>My learning</h1><p class="subtext">Your student account is always free.</p></div>{% include "components/user_menu.html" %}</header>
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <section id="upcoming" class="student-section">
+      <h2>Upcoming classes</h2><p class="subtext">Your next 100 scheduled classes. Times are shown in each class’s time zone.</p>
+      <div id="student-agenda" aria-live="polite"></div>
+      <h2 class="mt-4">My classes</h2><div id="student-enrollments" class="student-results"></div>
+    </section>
+    <section id="discover" class="student-section" hidden>
+      <h2>Find classes</h2><p class="subtext">Explore classes offered by teachers and organizations. Join directly when seats are available.</p>
+      <form id="student-search" class="student-filters">
+        <label>Class or organization<input class="form-control" name="q" maxlength="150" placeholder="Piano, maths…"></label>
+        <label>Location<input class="form-control" name="location" maxlength="150" placeholder="City, area or venue"></label>
+        <label>Learning mode<select class="form-select" name="mode"><option value="">All modes</option><option value="ONLINE">Online</option><option value="IN_PERSON">In person</option><option value="HYBRID">Hybrid</option></select></label>
+        <button class="btn btn-primary" type="submit">Search</button>
+      </form>
+      <div id="student-results" class="student-results" aria-live="polite"></div>
+      <div class="student-pagination"><button type="button" id="student-prev" class="btn btn-outline-primary" disabled>Previous</button><button type="button" id="student-next" class="btn btn-outline-primary" disabled>Next</button></div>
+    </section>
+  </main>
+</div></body></html>

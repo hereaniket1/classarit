@@ -42,12 +42,12 @@ PASSWORD_HASHER = PasswordHasher(
 # through timing differences.
 DUMMY_PASSWORD_HASH = PASSWORD_HASHER.hash("classarit-dummy-password-never-used")
 TERMS_VERSION = "demo-2026-09-20"
-ACCOUNT_TYPES = {'INDIVIDUAL', 'ORGANIZATION'}
+ACCOUNT_TYPES = {'INDIVIDUAL', 'ORGANIZATION', 'STUDENT'}
 
 
 def resolve_account_type(selected, admitted=None):
     if selected not in ACCOUNT_TYPES:
-        raise AccountUnavailable('Choose an Individual or Organization account.')
+        raise AccountUnavailable('Choose an Individual, Organization or Student account.')
     if admitted and selected != admitted:
         raise AccountUnavailable('Choose the account type approved for this invitation request.')
     return admitted or selected
@@ -402,13 +402,12 @@ def start_password_registration(email, full_name, phone, password, account_type,
 
 
 def start_email_verification(user_id):
-    if not setting_enabled("email_verification_enabled", True):
-        raise AccountUnavailable("Email verification is currently disabled")
+    verification_enabled = setting_enabled("email_verification_enabled", True)
     s = schema_name()
     with auth_engine().begin() as conn:
         row = conn.execute(
             text(
-                f"""SELECT u.id,u.full_name,e.email,e.verified_at
+                f"""SELECT u.id,u.full_name,u.account_type,e.email,e.verified_at
                 FROM {s}.app_users u JOIN {s}.user_emails e ON e.app_user_id=u.id
                 WHERE u.id=:id AND e.is_primary=true FOR UPDATE OF u,e"""
             ),
@@ -416,6 +415,8 @@ def start_email_verification(user_id):
         ).mappings().first()
         if not row:
             raise AccountUnavailable("Primary email is unavailable")
+        if not verification_enabled and row.get("account_type") != "STUDENT":
+            raise AccountUnavailable("Email verification is currently disabled")
         if row["verified_at"]:
             raise AccountUnavailable("Your email is already verified")
         challenge = _new_challenge(conn, row["id"], str(row["email"]).lower(), "EMAIL_VERIFY")

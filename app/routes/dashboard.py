@@ -23,6 +23,8 @@ ROLE_PRIORITY = ("OWNER", "ADMIN", "OPERATOR", "TEACHER", "STUDENT")
 
 
 def role_label(db, user, choices=None):
+    if user.get("account_type") == "STUDENT":
+        return "STUDENT"
     choices = choices if choices is not None else memberships(db, user)
     roles = {role for choice in choices for role in (choice.get("roles") or [])}
     if not roles.intersection(ROLE_PRIORITY[:4]) and db.first(
@@ -58,6 +60,8 @@ def dashboard(
 ):
     if request.session.get("google_profile_required"):
         return RedirectResponse("/auth/google/profile", 303)
+    if user.get("account_type") == "STUDENT":
+        return RedirectResponse("/student", 303)
     if user["user_type"] == "APPOWNER":
         return templates.TemplateResponse(
             "account_dashboard.html", context(request, user, appowner=True)
@@ -111,7 +115,7 @@ def profile(
             user,
             display_role=role_label(db, user, choices),
             workspaces=choices,
-            email_verification_enabled=setting_enabled(
+            email_verification_enabled=user.get("account_type") == "STUDENT" or setting_enabled(
                 "email_verification_enabled", True
             ),
         ),
@@ -120,6 +124,8 @@ def profile(
 
 @router.get("/workspaces/new", response_class=HTMLResponse)
 def onboarding(request: Request, user=Depends(require_user), db=Depends(transaction)):
+    if user.get("account_type") == "STUDENT":
+        return RedirectResponse("/student", 303)
     choices = memberships(db, user)
     if user["user_type"] != "OWNER" and db.first(
         "SELECT 1 FROM {s}.workspace_memberships WHERE user_id=:u", u=user["id"]
@@ -191,6 +197,8 @@ def dismiss(request: Request, user=Depends(require_user)):
 
 @router.post("/api/account/default-workspace")
 def set_default_workspace(payload: DefaultWorkspaceInput, user=Depends(require_user), db=Depends(transaction)):
+    if user.get("account_type") == "STUDENT":
+        raise HTTPException(403, "Student accounts do not manage workspaces.")
     row = db.first(
         """SELECT 1 FROM {s}.workspaces w
         JOIN {s}.workspace_memberships m ON m.workspace_id=w.id

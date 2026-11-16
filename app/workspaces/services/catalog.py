@@ -181,6 +181,11 @@ def _student_link_id(a, email, student_id=None):
 
 def student(a, p):
     a.allow(*MANAGERS)
+    return create_student_record(a, p)
+
+
+def create_student_record(a, p):
+    """Internal writer, after the caller authorizes the target workspace/class."""
     fields = p.model_dump(
         exclude={"guardian_name", "guardian_email", "guardian_phone"}
     )
@@ -368,10 +373,17 @@ def archive_student(a, student_id):
 
 
 def enroll(a, pid, p):
-    from .scheduling import add_participant
-
     a.allow(*MANAGERS)
     prog = a.program(pid)
+    return enroll_student(a, prog, p)
+
+
+def enroll_student(a, prog, p):
+    """Internal enrollment writer; callers must authorize and lock the workspace."""
+    from .scheduling import add_participant
+    pid = prog["id"]
+    if prog["status"] != "ACTIVE":
+        raise HTTPException(409, "This class is not active.")
     if prog["program_kind"] != "COURSE":
         raise HTTPException(422, "Events use session bookings rather than enrollments.")
     st = a.db.get("students", a.id, p.student_id)
@@ -398,7 +410,11 @@ def enroll(a, pid, p):
         finish=p.ends_on,
     )
     for session in sessions:
-        add_participant(a, session, p.student_id, "ENROLLMENT", row["id"])
+        booked = a.db.first("SELECT id FROM {s}.session_participants WHERE workspace_id=:w AND session_id=:s AND student_id=:st AND status='BOOKED'", w=a.id, s=session['id'], st=p.student_id)
+        if booked:
+            a.db.execute("UPDATE {s}.session_participants SET participation_kind='ENROLLMENT',enrollment_id=:e WHERE workspace_id=:w AND id=:id", e=row['id'], w=a.id, id=booked['id'])
+        else:
+            add_participant(a, session, p.student_id, "ENROLLMENT", row["id"])
     return row
 
 

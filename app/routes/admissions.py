@@ -17,7 +17,7 @@ class InterestInput(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
     email: str = Field(max_length=254, pattern=r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
     country: str = Field(pattern=r'^[A-Z]{2}$')
-    usage_type: Literal['INDIVIDUAL', 'ORGANIZATION']
+    usage_type: Literal['INDIVIDUAL', 'ORGANIZATION', 'STUDENT']
 
 
 class ReviewInput(BaseModel):

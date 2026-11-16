@@ -51,7 +51,7 @@ def _deliver(to, subject, body):
 
 def _details(row, internal=True):
     details = dict(row)
-    details['usage_type'] = {'INDIVIDUAL':'Individual', 'ORGANIZATION':'Organization'}.get(row.get('usage_type'), 'Not selected')
+    details['usage_type'] = {'INDIVIDUAL':'Individual', 'ORGANIZATION':'Organization', 'STUDENT':'Student'}.get(row.get('usage_type'), 'Not selected')
     when = row.get('requested_at')
     if hasattr(when, 'strftime'):
         details['requested_at'] = when.strftime('%d %b %Y, %H:%M %Z')

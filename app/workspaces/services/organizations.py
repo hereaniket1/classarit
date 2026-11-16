@@ -167,6 +167,8 @@ def _business_profile(db, user_id, payload):
 
 
 def create_workspace(db, user, payload):
+    if user.get("account_type") == "STUDENT":
+        raise HTTPException(403, "Student accounts cannot manage workspaces.")
     account = db.first(
         "SELECT user_type,account_type FROM {s}.app_users WHERE id=:u FOR UPDATE", u=user["id"]
     )
@@ -272,6 +274,8 @@ def invite(a, payload):
 
 
 def accept_invite(db, user, token):
+    if user.get("account_type") == "STUDENT":
+        raise HTTPException(403, "Student accounts cannot accept staff workspace invitations. Use the student dashboard.")
     hashed = hashlib.sha256(token.encode()).hexdigest()
     invitation = db.first(
         "SELECT * FROM {s}.workspace_invitations WHERE token_hash=:h", h=hashed

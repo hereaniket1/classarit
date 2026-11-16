@@ -127,6 +127,7 @@ export function action(s, key, id, refresh, context = {}) {
       f("description", "Description (optional)", "textarea", {
         value: program.description,
       }),
+      f("student_discoverable", "List this class in student search and allow direct enrollment (courses only)", "checkbox", { value: program.student_discoverable }),
       f("capacity", "Seats", "number", {
         value: program.capacity || 10,
         min: 1,
@@ -292,6 +293,10 @@ export function action(s, key, id, refresh, context = {}) {
       [],
       save(`/enrollments/${id}/end`),
     );
+  if (key === "class-student")
+    edit("Add student to class", [f("full_name", "Student name", "text", {required:true}), f("email", "Student email (used to link their account)", "email", {required:true}), f("phone", "Phone (optional)", "tel"), f("starts_on", "Start date", "date", {value:today,required:true})], save(`/programs/${id}/student-enrollment`));
+  if (key === "discovery")
+    edit("Student search", [f("student_discoverable", "Show this class in student search and allow direct enrollment", "checkbox", {value:selectedProgram(id).student_discoverable}), f("discovery_note", "Students can join this course directly when seats are available. Class details, teacher names and venue address will be visible to student accounts.", "note")], save(`/programs/${id}/discovery`, "PUT"));
   if (key === "enroll")
     edit(
       "Enroll student",

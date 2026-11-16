@@ -1,0 +1,15 @@
+.student-section h2{font-size:20px;margin-bottom:12px}
+.student-filters{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin:20px 0}
+.student-filters label{flex:1;min-width:160px;font-size:13px;font-weight:600}
+.student-filters input,.student-filters select{margin-top:6px}
+.student-results{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px}
+.student-results .workspace-card{margin:0;padding:20px}.student-results h3{font-size:18px}
+.student-results p{font-size:13px;overflow-wrap:anywhere}.student-results small{display:block;color:#64748b;margin-bottom:8px}
+.student-session{display:flex;align-items:center;gap:18px;padding:16px;border-bottom:1px solid #e4eaf5;background:white}
+.student-session>div{flex:1}.student-session strong,.student-session small{display:block}.student-session small{color:#64748b;margin-top:4px}
+.student-pagination{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+.student-empty{padding:24px;border:1px dashed #d9e2f1;border-radius:12px;color:#64748b}
+.student-skeleton{height:120px;margin:12px 0;border-radius:12px;background:linear-gradient(90deg,#eaf0fa,#f8faff,#eaf0fa);background-size:200% 100%;animation:student-shimmer 1.2s infinite}
+@keyframes student-shimmer{to{background-position:-200% 0}}
+@media(prefers-reduced-motion:reduce){.student-skeleton{animation:none}}
+@media(max-width:600px){.student-session{align-items:flex-start;flex-wrap:wrap;gap:8px}.student-session time{width:100%}.student-filters{gap:10px}.student-filters label{min-width:100%}}

@@ -113,7 +113,7 @@ export function render(s, tab) {
               .join(", "),
           ),
           `${s.enrollments.filter((e) => e.program_id === p.id && e.status === "ACTIVE").length} / ${p.capacity}`,
-          manager ? labeledButton("Edit", "edit-program", p.id) : "",
+          (manager ? labeledButton("Edit", "edit-program", p.id) : "") + (p.program_kind === "COURSE" && p.status === "ACTIVE" ? labeledButton("Add student", "class-student", p.id) + labeledButton(p.student_discoverable ? "Listed in search" : "List in student search", "discovery", p.id) : ""),
         ]),
         "No classes yet.",
       )

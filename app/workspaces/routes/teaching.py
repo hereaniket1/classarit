@@ -10,8 +10,49 @@ from ..schemas import (
 )
 from ..services import catalog
 from ...services import notifications
+from pydantic import BaseModel, Field
+from datetime import date
+from fastapi import HTTPException
+from ..access import MANAGERS
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}")
+
+
+class DiscoveryInput(BaseModel):
+    student_discoverable: bool
+
+
+class ClassStudentInput(BaseModel):
+    full_name: str = Field(min_length=1, max_length=150)
+    email: str = Field(max_length=254, pattern=r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+    phone: str | None = None
+    starts_on: date
+
+
+@router.put('/programs/{program_id}/discovery')
+def discovery(program_id: UUID, p: DiscoveryInput, a=Depends(access)):
+    a.allow(*MANAGERS, 'TEACHER')
+    program = a.program(program_id)
+    if program['program_kind'] != 'COURSE':
+        raise HTTPException(422, 'Only courses support student self-enrollment.')
+    a.db.execute('UPDATE {s}.teaching_programs SET student_discoverable=:listed WHERE workspace_id=:w AND id=:p',
+                 listed=p.student_discoverable, w=a.id, p=program_id)
+    return {'ok': True}
+
+
+@router.post('/programs/{program_id}/student-enrollment', status_code=201)
+def class_student(program_id: UUID, p: ClassStudentInput, a=Depends(access)):
+    a.allow(*MANAGERS, 'TEACHER')
+    program = a.program(program_id)  # Teachers can add only to their assigned classes.
+    student = a.db.first('SELECT * FROM {s}.students WHERE workspace_id=:w AND lower(btrim(email))=:email ORDER BY created_at,id LIMIT 1',
+                         w=a.id, email=p.email.strip().lower())
+    if not student:
+        student = catalog.create_student_record(a, StudentInput(full_name=p.full_name.strip(),email=p.email.strip().lower(),phone=p.phone))
+    existing = a.db.first("SELECT id FROM {s}.enrollments WHERE workspace_id=:w AND program_id=:p AND student_id=:st AND status IN ('ACTIVE','PAUSED')",
+                          w=a.id,p=program_id,st=student['id'])
+    if existing:
+        return existing
+    return catalog.enroll_student(a, program, EnrollmentInput(student_id=student['id'], starts_on=p.starts_on))
 
 
 @router.post("/activities", status_code=201)

@@ -37,7 +37,7 @@ async function load() {
       const row = document.createElement('tr');
       row.id = 'request-' + item.id;
       cell(row, `${item.full_name}\n${item.email}`);
-      cell(row, `${item.usage_type === 'ORGANIZATION' ? 'Organization' : item.usage_type === 'INDIVIDUAL' ? 'Individual' : 'Not selected'} Â· ${item.country}`);
+      cell(row, `${item.usage_type === 'ORGANIZATION' ? 'Organization' : item.usage_type === 'INDIVIDUAL' ? 'Individual' : item.usage_type === 'STUDENT' ? 'Student' : 'Not selected'} Â· ${item.country}`);
       cell(row, date(item.requested_at));
       cell(row, item.status + (item.verification_required ? (item.email_verified_at ? ' Â· Email verified' : ' Â· Awaiting email verification') : ' Â· Legacy request'));
       cell(row, date(item.last_email_sent_at));

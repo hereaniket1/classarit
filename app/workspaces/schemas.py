@@ -114,6 +114,7 @@ class StudentInput(Input):
 
 
 class ProgramInput(Input):
+    student_discoverable: bool = False
     name: str = Field(min_length=1, max_length=150)
     activity_id: UUID | None = None
     activity_name: str | None = None

@@ -52,6 +52,8 @@ def access(
     db: Store = Depends(transaction),
     user=Depends(require_user),
 ):
+    if user.get("account_type") == "STUDENT":
+        raise HTTPException(403, "Use your student dashboard to view your classes.")
     # Serialize mutations within one workspace to protect capacity, conflicts and owners.
     lock = " FOR UPDATE" if request.method not in ("GET", "HEAD", "OPTIONS") else ""
     workspace = db.first(
