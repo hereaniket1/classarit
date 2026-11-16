@@ -32,6 +32,10 @@ try {
   return route.fulfill({body:await fs.readFile(file),contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});
  });
  await page.goto('http://classarit.test/workspace');
+ assert.equal(await page.locator('.workspace-sidebar #logout, .workspace-sidebar a[href="/profile"], .workspace-sidebar .account-profile').count(),0);
+ assert.equal(await page.locator('.workspace-user-header > .quick-actions .quick-action').count(),3);
+ const initialClock=await page.locator('#workspace-clock').getAttribute('datetime');
+ await page.waitForFunction(previous=>document.querySelector('#workspace-clock').dateTime!==previous,initialClock);
  for(const width of [390,1440]) {
   await page.setViewportSize({width,height:950});
   for(const tab of ['dashboard','calendar']) {
@@ -58,7 +62,7 @@ try {
      assert.equal(await page.locator('#editor [name="grant_makeups"]').count(),1);
      await page.locator('#cancel-editor').click();
     }
-   } else assert.equal(await page.locator('.agenda-day').count(),2);
+   } else assert.equal(await page.locator('.agenda-day').count(),8);
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
    await page.screenshot({path:path.join(fixture,`${tab}-${width}.png`),fullPage:true});
    if(tab==='calendar') {
@@ -112,9 +116,18 @@ try {
   assert.equal(await page.locator('#editor [name="teacher_ids"]').count()>0,!single);
   await page.locator('#cancel-editor').click();
  }
+ await page.locator('#user-dropdown summary').click();
  await page.locator('#make-default-workspace').click();
  await page.waitForFunction(()=>document.querySelector('#make-default-workspace').textContent==='Default workspace');
  assert.equal(await page.locator('#make-default-workspace').isDisabled(),true);
+ await page.keyboard.press('Escape');
+ assert.equal(await page.locator('#user-dropdown').getAttribute('open'),null);
+ await page.locator('#user-dropdown summary').click();
+ await page.locator('.workspace-heading h1').click();
+ assert.equal(await page.locator('#user-dropdown').getAttribute('open'),null);
+ await page.locator('[data-workspace-dashboard]').click();
+ await page.locator('.agenda-today').waitFor();
+ assert.equal(await page.locator('.agenda-week .agenda-day').count(),7);
  assert.deepEqual(errors,[]);
  console.log('Passed: workspace section navigation, failed load retry, failed save cleanup and successful save retry.');
 } finally {await browser.close();}

@@ -86,13 +86,14 @@ export function render(s, tab) {
   if (tab === "dashboard") {
     const now = new Date(), zone = s.workspace.timezone;
     const today = dateKey(now, zone);
-    const next = new Date(`${today}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 1);
-    const tomorrow = next.toISOString().slice(0,10);
-    return head("Dashboard") + `<p class="subtext">Your next two days · ${esc(zone)}</p><div class="agenda-grid">${[[today,"Today"],[tomorrow,"Tomorrow"]].map(([day,label]) => {
+    const days = Array.from({length:8},(_,i)=>{const d=new Date(`${today}T12:00:00Z`);d.setUTCDate(d.getUTCDate()+i);return d.toISOString().slice(0,10);});
+    const dayCard = (day,label) => {
       const items = s.sessions.filter(x => x.status === "SCHEDULED" && new Date(x.ends_at) > now && dateKey(x.starts_at,zone) <= day && dateKey(new Date(new Date(x.ends_at)-1),zone) >= day).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
-      return `<section class="workspace-card agenda-day"><h3>${label} <small>${esc(day)}</small></h3>${items.length ? items.map(x=>`<article class="agenda-item">${icon(x.session_kind === 'EVENT' ? 'session' : 'program')}<div><strong>${esc(x.title)}</strong><p>${esc(time(x.starts_at))} – ${esc(new Date(x.ends_at).toLocaleTimeString(undefined,{timeZone:zone,hour:'numeric',minute:'2-digit'}))}</p><small>${new Date(x.starts_at)<=now ? 'In progress · ' : ''}${esc(x.delivery_mode)}</small></div></article>`).join('') : '<p class="agenda-empty">No upcoming activities. Enjoy the breathing room.</p>'}</section>`;
-    }).join('')}</div>`;
+      return `<section class="workspace-card agenda-day"><h3>${esc(label)} <small>${esc(new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined,{timeZone:'UTC',month:'short',day:'numeric'}))}</small></h3>${items.length ? items.map(x=>`<article class="agenda-item">${icon(x.session_kind === 'EVENT' ? 'session' : 'program')}<div><strong>${esc(x.title)}</strong><p>${esc(time(x.starts_at))} – ${esc(new Date(x.ends_at).toLocaleTimeString(undefined,{timeZone:zone,hour:'numeric',minute:'2-digit'}))}</p><small>${new Date(x.starts_at)<=now ? 'In progress · ' : ''}${esc(x.delivery_mode)}</small></div></article>`).join('') : '<p class="agenda-empty">No upcoming activities.</p>'}</section>`;
+    };
+    return head("Dashboard") + `<div class="agenda-today">${dayCard(today,'Today')}</div><h2 class="agenda-week-heading">Next 7 days</h2><div class="agenda-week">${days.slice(1).map(day=>dayCard(day,new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined,{timeZone:'UTC',weekday:'long'}))).join('')}</div>`;
   }
+
   if (tab === "calendar") return renderCalendar(s);
   if (tab === "reporting")
     return (

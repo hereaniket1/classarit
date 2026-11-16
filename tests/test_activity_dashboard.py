@@ -7,7 +7,7 @@ from app.workspaces.services import queries
 
 
 class ActivityDashboardTests(unittest.TestCase):
-    def test_two_day_window_uses_workspace_timezone_and_teacher_scope(self):
+    def test_today_and_next_seven_days_use_workspace_timezone_and_teacher_scope(self):
         for roles in ({'TEACHER'}, {'OWNER'}):
             access = SimpleNamespace(id='workspace', member={'id': 'teacher'},
                                      roles=roles, workspace={'timezone': 'Asia/Kolkata'}, db=MagicMock())
@@ -21,7 +21,7 @@ class ActivityDashboardTests(unittest.TestCase):
                 result = queries.section(access, 'dashboard')
             statement = access.db.all.call_args.args[0]
             values = access.db.all.call_args.kwargs
-            self.assertEqual(values['until'].isoformat(), '2026-02-03T00:00:00+05:30')
+            self.assertEqual(values['until'].isoformat(), '2026-02-09T00:00:00+05:30')
             self.assertEqual('st.membership_id=:m' in statement, roles == {'TEACHER'})
             self.assertIn("s.status='SCHEDULED'", statement)
             self.assertIn('s.ends_at>:now', statement)

@@ -255,6 +255,7 @@ document.addEventListener("click", (e) => {
     e.preventDefault();
     loadTab("sessions", { history: b.dataset.scheduleHistory === "true" });
   } else if (b.dataset.tab) {
+    e.preventDefault();
     if (!allowedTabs.includes(b.dataset.tab)) return;
     loadTab(b.dataset.tab);
   } else if (snapshot) {
@@ -308,3 +309,25 @@ document.addEventListener("click", e => {
      notice('This workspace will open by default after login.');
    } catch(error) { button.disabled = false; notice(error.message, true); }
  });
+
+const userMenu = document.querySelector('#user-dropdown');
+document.addEventListener('click', event => {
+  if (userMenu?.open && !userMenu.contains(event.target)) userMenu.open = false;
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && userMenu?.open) {
+    userMenu.open = false;
+    userMenu.querySelector('summary').focus();
+  }
+});
+const clock = document.querySelector('#workspace-clock');
+if (clock) {
+  const formatter = new Intl.DateTimeFormat(undefined, {timeZone:clock.dataset.timezone,weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const tick = () => { const now = new Date(); clock.dateTime = now.toISOString(); clock.textContent = `${formatter.format(now)} · ${clock.dataset.timezone}`; };
+  tick();
+  let timer = setInterval(tick,1000);
+  window.addEventListener('pagehide',()=>clearInterval(timer));
+  window.addEventListener('pageshow',()=>{clearInterval(timer);tick();timer=setInterval(tick,1000);});
+}
+
+document.querySelector('[data-workspace-dashboard]')?.addEventListener('click',event=>{event.preventDefault();loadTab('dashboard');});

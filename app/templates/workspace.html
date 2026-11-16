@@ -29,13 +29,9 @@
   >
     <div class="workspace-shell">
       <aside class="workspace-sidebar">
-        <a class="workspace-brand" href="/dashboard?overview=1"
+        <a class="workspace-brand" href="{{ '/workspaces/' ~ workspace.id ~ '#dashboard' if workspace else '/dashboard' }}" {% if workspace %}data-workspace-dashboard{% endif %}
           ><span class="brand-mark">C</span> Classarit</a
         >
-        <a class="account-profile" href="/dashboard?overview=1" aria-label="Open main dashboard">
-          <span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span>
-          <span><strong>{{ user.full_name or 'My account' }}</strong><small>{{ display_role }}</small></span>
-        </a>
         {% if workspace %}
 
         <nav aria-label="Workspace sections">
@@ -45,35 +41,24 @@
             {% set sections = [('dashboard','Dashboard'),('calendar','Calendar'),('classes','Classes & events'),('students','Students'),('sessions','Schedule & attendance'),('venues','Venues')] %}{% if owner_view %}{% set sections = sections + [('reporting','Reporting')] %}{% endif %}{% set sections = sections + [('settings','Settings')] %}
           {% endif %}
           {% for key,title in sections %}<button type="button" data-tab="{{ key }}" title="{{ title }}">{{ icon({'dashboard':'reporting','calendar':'calendar','classes':'classes','students':'students','sessions':'calendar','venues':'venue','reporting':'reporting','settings':'gear'}[key]) }}<span>{{ title }}</span></button>{% endfor %}
-        </nav>
-        {% endif %}
-        <div class="workspace-footer">
-          <a class="account-nav" href="/profile" title="Open your profile">Profile</a>
           {% if executive_access %}<a class="account-nav executive-link" href="/executive">Executive dashboard</a>{% endif %}
-          <button type="button" id="logout">Log out</button>
-        </div>
+        </nav>
+        {% elif executive_access %}
+        <a class="account-nav executive-link" href="/executive">Executive dashboard</a>
+        {% endif %}
       </aside>
       <main class="workspace-main">
-        <header>
-          <div>
-
-            <div class="workspace-title-row">
-              <h1>{{ workspace.name if workspace else 'Welcome to Classarit' }}</h1>
-              {% if workspace %}
-              {% if not teacher_only %}
-              <div class="quick-actions" role="group" aria-label="Quick add">
-                <span class="quick-actions-label">Quick add</span>
-                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="student" aria-label="Add student" title="Add student" disabled>
-                  {{ icon('students') }}<span>Student</span>
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="program" aria-label="Create class or event" title="Create class or event" disabled>
-                  {{ icon('classes') }}<span>Class / event</span>
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="session" aria-label="Schedule classes" title="Schedule classes" disabled>
-                  {{ icon('calendar') }}<span>Schedule</span>
-                </button>
-              </div>
-              {% endif %}
+        <header class="workspace-user-header">
+          <div class="workspace-heading-row">
+            <div class="workspace-heading"><h1>{{ workspace.name if workspace else 'Welcome to Classarit' }}</h1>
+            {% if workspace %}<time id="workspace-clock" data-timezone="{{ workspace.timezone }}"></time>{% endif %}</div>
+            <details class="user-dropdown" id="user-dropdown">
+              <summary><span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span><span class="user-menu-name">{{ user.full_name or 'My account' }}</span><span class="user-chevron" aria-hidden="true">⌄</span></summary>
+              <div class="user-dropdown-panel">
+                <div class="user-menu-heading"><strong>{{ user.full_name or 'My account' }}</strong><small>{{ display_role }}</small></div>
+                <a href="/profile">Update profile</a>
+                <button type="button" id="logout">Log out</button>
+                {% if workspace %}<div class="user-workspace-controls">
               {% if organization_account %}
               <label class="workspace-picker"><span>Switch workspace</span>
                 {{ icon('workspaces') }}
@@ -87,10 +72,24 @@
               {% if can_add_workspace %}<a class="btn btn-sm btn-primary" href="/workspaces/new">Add workspace</a>{% endif %}
               {% if owner_view %}<button type="button" id="make-default-workspace" class="btn btn-sm btn-outline-primary" {% if user.default_workspace_id|string == workspace.id|string %}disabled{% endif %}>{{ 'Default workspace' if user.default_workspace_id|string == workspace.id|string else 'Make default' }}</button>{% endif %}
               {% endif %}
-
-              {% endif %}
-            </div>
+                </div>{% endif %}
+              </div>
+            </details>
           </div>
+          {% if workspace and not teacher_only %}
+              <div class="quick-actions" role="group" aria-label="Quick add">
+                <span class="quick-actions-label">Quick add</span>
+                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="student" aria-label="Add student" title="Add student" disabled>
+                  {{ icon('students') }}<span>Student</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="program" aria-label="Create class or event" title="Create class or event" disabled>
+                  {{ icon('classes') }}<span>Class / event</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="session" aria-label="Schedule classes" title="Schedule classes" disabled>
+                  {{ icon('calendar') }}<span>Schedule</span>
+                </button>
+              </div>
+          {% endif %}
         </header>
         <div id="notice" role="status" aria-live="polite" hidden></div>
         {% if invitation %}
