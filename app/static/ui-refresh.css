@@ -97,7 +97,7 @@
 @media(max-width:600px){.calendar-popup-panel{padding:12px}.calendar-popup-panel .day-popup-heading h2{font-size:18px}.calendar-popup-panel .day-icon-button{width:40px;height:40px;min-width:40px;min-height:40px}.calendar-popup-panel .compact-day-session{gap:8px;padding:5px 0}.day-session-details{gap:12px}.calendar-popup-panel .compact-day-session .row-actions{gap:4px}}
 .workspace-heading{flex:1}.workspace-name-actions{display:flex;align-items:center;gap:14px;min-width:0;flex-wrap:wrap}
 .workspace-heading .workspace-name-actions h1{margin:0!important}
-.workspace-name-actions .quick-actions{display:flex!important;align-items:center;gap:6px;margin:0!important;padding:0!important;flex:0 0 auto;width:auto!important;background:transparent;flex-wrap:nowrap}
+.workspace-name-actions .quick-actions{display:flex!important;align-items:center;gap:6px;margin:0!important;padding:0!important;flex:1 1 auto;justify-content:center;width:auto!important;background:transparent;flex-wrap:nowrap}
 .workspace-name-actions .quick-actions-label{flex-basis:auto!important;width:auto!important;font-size:11px}
 .workspace-name-actions .quick-action{flex:0 0 auto!important}
 .workspace-heading #workspace-clock{margin-top:5px}
