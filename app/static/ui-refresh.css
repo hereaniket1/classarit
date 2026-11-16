@@ -95,3 +95,35 @@
 .calendar-popup-panel .compact-day-session .row-actions{display:flex;flex-wrap:nowrap;gap:6px;margin:0;flex-shrink:0}
 .calendar-popup-panel .day-empty{margin:12px 0 0;color:#7b879b;font-size:13px}
 @media(max-width:600px){.calendar-popup-panel{padding:12px}.calendar-popup-panel .day-popup-heading h2{font-size:18px}.calendar-popup-panel .day-icon-button{width:40px;height:40px;min-width:40px;min-height:40px}.calendar-popup-panel .compact-day-session{gap:8px;padding:5px 0}.day-session-details{gap:12px}.calendar-popup-panel .compact-day-session .row-actions{gap:4px}}
+.workspace-heading{flex:1}.workspace-name-actions{display:flex;align-items:center;gap:14px;min-width:0;flex-wrap:wrap}
+.workspace-heading .workspace-name-actions h1{margin:0!important}
+.workspace-name-actions .quick-actions{display:flex!important;align-items:center;gap:6px;margin:0!important;padding:0!important;flex:0 0 auto;width:auto!important;background:transparent;flex-wrap:nowrap}
+.workspace-name-actions .quick-actions-label{flex-basis:auto!important;width:auto!important;font-size:11px}
+.workspace-name-actions .quick-action{flex:0 0 auto!important}
+.workspace-heading #workspace-clock{margin-top:5px}
+.workspace-main .workspace-user-header{margin-bottom:12px}
+.month-calendar .calendar-head{gap:10px;padding:10px 12px}
+.month-calendar .calendar-head>.calendar-legend{padding:0;border:0;gap:6px;margin:0}
+.month-calendar .calendar-head .calendar-key{padding:4px 7px;font-size:11px;gap:4px}
+.month-calendar .calendar-toolbar{width:auto;margin-left:auto;gap:8px}
+@media(max-width:760px){
+ .workspace-heading-row{gap:8px}.workspace-name-actions{gap:6px;flex-wrap:nowrap}
+ .workspace-heading .workspace-name-actions h1{font-size:16px!important;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .workspace-name-actions .quick-actions{gap:3px}
+ .workspace-name-actions .quick-actions-label,.workspace-name-actions .quick-action>span{display:none}
+ .workspace-name-actions .quick-action{padding:5px;width:30px;height:32px;min-height:32px!important;min-width:30px}
+ .workspace-name-actions .quick-action .ui-icon{width:16px;height:16px}
+ .user-menu-name{max-width:70px}.user-dropdown summary{font-size:11px;gap:3px;padding:7px 5px}
+ .month-calendar .calendar-head{display:grid;grid-template-columns:minmax(0,1fr) auto;padding:8px;gap:6px}
+ .month-calendar .month-selector{padding:2px;gap:0;min-width:0;justify-content:space-between}
+ .month-calendar .month-selector h2{font-size:12px;white-space:normal;text-align:center;line-height:1.2}.month-calendar .month-selector button{width:24px;height:30px;font-size:22px;flex-shrink:0}
+ .month-calendar .calendar-head>.calendar-legend{gap:4px;flex-wrap:nowrap}
+ .month-calendar .calendar-head .calendar-key{border:0;background:transparent;padding:0;font-size:9px;gap:2px}
+ .month-calendar .calendar-key .ui-icon{width:11px;height:11px}
+ .month-calendar .calendar-toolbar{grid-column:1/-1;justify-content:flex-end;width:100%}
+ .month-calendar .calendar-view-switch button{min-height:30px;padding:5px 10px;font-size:11px}
+ .month-calendar .calendar-toolbar>.btn{min-height:30px;padding:5px 10px;font-size:11px}
+ .month-calendar .weekday-row span{padding:8px 0}
+ .month-calendar .calendar-day,.month-calendar .calendar-blank{height:50px;min-height:50px;padding:3px 2px}
+ .month-calendar .calendar-day strong{line-height:18px}
+}

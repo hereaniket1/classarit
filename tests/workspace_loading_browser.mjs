@@ -33,7 +33,7 @@ try {
  });
  await page.goto('http://classarit.test/workspace');
  assert.equal(await page.locator('.workspace-sidebar #logout, .workspace-sidebar a[href="/profile"], .workspace-sidebar .account-profile').count(),0);
- assert.equal(await page.locator('.workspace-user-header > .quick-actions .quick-action').count(),3);
+ assert.equal(await page.locator('.workspace-name-actions .quick-action').count(),3);
  const initialClock=await page.locator('#workspace-clock').getAttribute('datetime');
  await page.waitForFunction(previous=>document.querySelector('#workspace-clock').dateTime!==previous,initialClock);
  for(const width of [390,1440]) {
@@ -46,6 +46,11 @@ try {
     assert.equal(await page.locator('.weekday-row span').count(),7);
     assert.equal(await page.locator('.weekday-row span').first().textContent(),'Mon');
     assert.equal(await page.locator('.calendar-key').count(),3);
+    assert.equal(await page.locator('.calendar-head > .calendar-legend .calendar-key').count(),3);
+    if(width===390) {
+     assert.ok(await page.locator('.month-calendar').evaluate(el=>el.getBoundingClientRect().bottom<=640));
+     assert.ok(await page.locator('.workspace-name-actions').evaluate(el=>Math.abs(el.querySelector('h1').getBoundingClientRect().top-el.querySelector('.quick-actions').getBoundingClientRect().top)<20));
+    }
     await page.locator('[data-calendar-day]').first().click();
     await page.locator('#calendar-popup').waitFor();
     await page.locator('[aria-label="Close day schedule"]').click();

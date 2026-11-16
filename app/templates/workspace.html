@@ -50,7 +50,22 @@
       <main class="workspace-main">
         <header class="workspace-user-header">
           <div class="workspace-heading-row">
-            <div class="workspace-heading"><h1>{{ workspace.name if workspace else 'Welcome to Classarit' }}</h1>
+            <div class="workspace-heading"><div class="workspace-name-actions"><h1 title="{{ workspace.name if workspace else 'Welcome to Classarit' }}">{{ workspace.name if workspace else 'Welcome to Classarit' }}</h1>
+          {% if workspace and not teacher_only %}
+              <div class="quick-actions" role="group" aria-label="Quick add">
+                <span class="quick-actions-label">Quick add</span>
+                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="student" aria-label="Add student" title="Add student" disabled>
+                  {{ icon('students') }}<span>Student</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="program" aria-label="Create class or event" title="Create class or event" disabled>
+                  {{ icon('classes') }}<span>Class / event</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="session" aria-label="Schedule classes" title="Schedule classes" disabled>
+                  {{ icon('calendar') }}<span>Schedule</span>
+                </button>
+              </div>
+          {% endif %}
+            </div>
             {% if workspace %}<time id="workspace-clock" data-timezone="{{ workspace.timezone }}"></time>{% endif %}</div>
             <details class="user-dropdown" id="user-dropdown">
               <summary><span class="account-avatar" aria-hidden="true">{{ (user.full_name or 'C')[0]|upper }}</span><span class="user-menu-name">{{ user.full_name or 'My account' }}</span><svg class="user-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary>
@@ -73,20 +88,7 @@
               </div>
             </details>
           </div>
-          {% if workspace and not teacher_only %}
-              <div class="quick-actions" role="group" aria-label="Quick add">
-                <span class="quick-actions-label">Quick add</span>
-                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="student" aria-label="Add student" title="Add student" disabled>
-                  {{ icon('students') }}<span>Student</span>
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="program" aria-label="Create class or event" title="Create class or event" disabled>
-                  {{ icon('classes') }}<span>Class / event</span>
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-primary labeled-action quick-action" data-action="session" aria-label="Schedule classes" title="Schedule classes" disabled>
-                  {{ icon('calendar') }}<span>Schedule</span>
-                </button>
-              </div>
-          {% endif %}
+
         </header>
         <div id="notice" role="status" aria-live="polite" hidden></div>
         {% if invitation %}
