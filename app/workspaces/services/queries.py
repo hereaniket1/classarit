@@ -389,7 +389,7 @@ def section(a, tab, month=None, history=False):
     if tab == "dashboard":
         now = datetime.now(timezone.utc)
         local = now.astimezone(ZoneInfo(a.workspace["timezone"]))
-        until = (local + timedelta(days=8)).replace(hour=0, minute=0, second=0, microsecond=0)
+        until = (local + timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
         teacher_clause = "" if a.roles.intersection(MANAGERS) else """AND EXISTS (
             SELECT 1 FROM {s}.session_teachers st WHERE st.workspace_id=s.workspace_id
             AND st.session_id=s.id AND st.membership_id=:m)"""

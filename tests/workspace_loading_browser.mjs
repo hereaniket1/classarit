@@ -62,7 +62,7 @@ try {
      assert.equal(await page.locator('#editor [name="grant_makeups"]').count(),1);
      await page.locator('#cancel-editor').click();
     }
-   } else assert.equal(await page.locator('.agenda-day').count(),8);
+   } else assert.equal(await page.locator('.agenda-day').count(),7);
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
    await page.screenshot({path:path.join(fixture,`${tab}-${width}.png`),fullPage:true});
    if(tab==='calendar') {
@@ -126,7 +126,10 @@ try {
  await page.locator('.workspace-heading h1').click();
  assert.equal(await page.locator('#user-dropdown').getAttribute('open'),null);
  await page.locator('[data-workspace-dashboard]').click();
- await page.locator('.agenda-today').waitFor();
+ await page.getByRole('heading',{name:'Upcoming classes',exact:true}).waitFor();
+ assert.equal(await page.locator('.agenda-calendar').count(),1);
+ assert.equal(await page.locator('.agenda-week .calendar-day.today').count(),1);
+ assert.equal(await page.locator('.agenda-week .calendar-day').first().evaluate(el=>el.classList.contains('today')),true);
  assert.equal(await page.locator('.agenda-week .agenda-day').count(),7);
  await page.locator('.agenda-week [data-calendar-day]').last().click();
  await page.locator('#calendar-popup').waitFor();
