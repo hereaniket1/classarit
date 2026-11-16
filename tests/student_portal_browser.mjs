@@ -23,17 +23,17 @@ try {
    else{lastSearch=url.searchParams;body={classes:[{id:'course',name:'Maths <script>alert(1)</script>',description:'Practice together',workspace_name:'Study studio',teachers:'Teacher',default_delivery_mode:'ONLINE',default_duration_minutes:60,seats_available:1,enrolled}],has_more:false};}
    return route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
   }
-  const fixtureName=url.pathname==='/student/planner'?'student-planner':url.pathname==='/student/calendar'?'student-calendar':'student';
+  const fixtureName=url.pathname==='/student/planner'?'student-planner':url.pathname==='/student/calendar'?'student-calendar':url.pathname==='/student/classes'?'student-classes':'student';
   const file=url.pathname.startsWith('/static/')?path.join(process.cwd(),'app',url.pathname):path.join(fixture,`${fixtureName}.html`);
   await route.fulfill({body:await fs.readFile(file),contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});
  });
  await page.goto('http://classarit.test/student');
- await page.getByText('You have not enrolled in any classes yet.').waitFor();
+ await page.getByText('Upcoming classes').waitFor();
  assert.equal(await page.locator('[data-action],#workspace-picker,a[href="/workspaces/new"],a[href="/dashboard?overview=1"]').count(),0);
  await page.locator('#user-dropdown summary').click();
  await page.getByRole('link',{name:'Edit profile'}).waitFor();
  await page.keyboard.press('Escape');
- await page.goto('http://classarit.test/student#discover');
+ await page.goto('http://classarit.test/student/classes');
  await page.getByRole('button',{name:'Join class',exact:true}).waitFor();
  assert.equal(await page.locator('#student-results script').count(),0);
  for(const width of [1440,390]){
@@ -51,9 +51,8 @@ try {
  fail=false;await page.getByRole('button',{name:'Join class',exact:true}).click();
  await page.getByRole('button',{name:'Enrolled',exact:true}).waitFor();
  await page.goto('http://classarit.test/student');
- await page.locator('.student-calendar-item.class-item').waitFor();
- assert.equal(await page.locator('.student-calendar-item.class-item').count(),1);
- assert.equal(await page.locator('#student-enrollments h3').textContent(),'Maths');
+ await page.locator('.student-class-link').waitFor();
+ assert.equal(await page.locator('.student-class-link').count(),1);
  await page.goto('http://classarit.test/student/planner');
  await page.locator('#planner-form [name="title"]').fill('School project');
  await page.locator('#planner-form [name="starts_at"]').fill('2026-11-19T09:00');
@@ -62,8 +61,8 @@ try {
  assert.equal(taskCreated,true);
  await page.goto('http://classarit.test/student/calendar?month=2026-11');
  await page.locator('#month-title').waitFor();
- assert.equal(await page.locator('.student-month-grid').count(),1);
- assert.equal(await page.locator('.month-item.task-item').count(),1);
+ assert.equal(await page.locator('.month-calendar').count(),1);
+ assert.equal(await page.locator('.task-item').count(),1);
  assert.deepEqual(errors,[]);
  console.log('Passed: student navigation, no staff controls, safe results, filters, mobile layout, enrollment error recovery and upcoming classes.');
 }finally{await browser.close();}

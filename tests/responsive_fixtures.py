@@ -30,6 +30,7 @@ render('invitation','workspace.html',invitation='fixture-token')
 student_fixture={**user,'account_type':'STUDENT','user_type':'MEMBER'}
 render('student','student.html',user=student_fixture,display_role='STUDENT',student_view='dashboard')
 render('student-calendar','student.html',user=student_fixture,display_role='STUDENT',student_view='calendar')
+render('student-classes','student.html',user=student_fixture,display_role='STUDENT',student_view='classes')
 render('student-planner','student.html',user=student_fixture,display_role='STUDENT',student_view='planner')
 render('home','home.html')
 render('login','login.html')

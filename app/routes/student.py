@@ -26,6 +26,8 @@ class PlannerTaskInput(BaseModel):
     timezone: str = Field(default='Asia/Kolkata', min_length=3, max_length=80)
     location: str | None = Field(default=None, max_length=250)
     notes: str | None = Field(default=None, max_length=2000)
+    repeat: Literal['NONE','DAILY','WEEKLY'] = 'NONE'
+    repeat_count: int = Field(default=1, ge=1, le=52)
 
 
 def require_student(user=Depends(require_user)):
@@ -42,6 +44,11 @@ def student_page(request: Request, user=Depends(require_student)):
 @router.get('/student/calendar')
 def student_calendar_page(request: Request, user=Depends(require_student)):
     return templates.TemplateResponse('student.html', context(request, user, display_role='STUDENT', student_view='calendar'))
+
+
+@router.get('/student/classes')
+def student_classes_page(request: Request, user=Depends(require_student)):
+    return templates.TemplateResponse('student.html', context(request, user, display_role='STUDENT', student_view='classes'))
 
 
 @router.get('/student/planner')
@@ -140,9 +147,13 @@ def create_planner_task(payload: PlannerTaskInput, user=Depends(require_student)
         end = end.replace(tzinfo=zone)
     if end <= start:
         raise HTTPException(422, 'End time must be after the start time.')
-    return db.insert('student_planner_tasks', student_user_id=user['id'], title=payload.title,
-                     starts_at=start, ends_at=end, timezone=payload.timezone,
-                     location=payload.location, notes=payload.notes, status='ACTIVE')
+    created = None
+    for index in range(payload.repeat_count if payload.repeat != 'NONE' else 1):
+        shift = timedelta(days=index if payload.repeat == 'DAILY' else index * 7) if payload.repeat != 'NONE' else timedelta(0)
+        created = db.insert('student_planner_tasks', student_user_id=user['id'], title=payload.title,
+                            starts_at=start + shift, ends_at=end + shift, timezone=payload.timezone,
+                            location=payload.location, notes=payload.notes, status='ACTIVE')
+    return created
 
 
 @router.delete('/api/student/planner/tasks/{task_id}')
