@@ -2,10 +2,11 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
-from datetime import date
+from datetime import date, datetime
 from fastapi import HTTPException
 
 from app.routes import student
+from app.routes.student import PlannerTaskInput
 from app.auth import repository
 from app.services import admissions
 from app.routes.admissions import InterestInput
@@ -104,8 +105,30 @@ class StudentPortalTests(unittest.TestCase):
         self.db.all.return_value=[]
         student.upcoming(self.user,self.db)
         for call in self.db.all.call_args_list:
-            self.assertIn('st.linked_user_id=:u',call.args[0])
+            self.assertTrue('st.linked_user_id=:u' in call.args[0] or 'student_user_id=:u' in call.args[0])
             self.assertEqual(call.kwargs['u'],self.user['id'])
+
+    def test_planner_task_is_personal_and_defaults_to_one_hour(self):
+        self.db.insert.return_value={'id':'task-1'}
+        payload=PlannerTaskInput(title='School',starts_at=datetime(2026,11,20,9),timezone='Asia/Kolkata')
+        result=student.create_planner_task(payload,self.user,self.db)
+        self.assertEqual(result['id'],'task-1')
+        self.assertEqual(self.db.insert.call_args.kwargs['student_user_id'],self.user['id'])
+        self.assertEqual((self.db.insert.call_args.kwargs['ends_at']-self.db.insert.call_args.kwargs['starts_at']).total_seconds(),3600)
+
+    def test_planner_task_rejects_invalid_timezone_and_range(self):
+        with self.assertRaises(HTTPException):
+            student.create_planner_task(PlannerTaskInput(title='School',starts_at=datetime(2026,11,20,9),timezone='Not/AZone'),self.user,self.db)
+        with self.assertRaises(HTTPException):
+            student.create_planner_task(PlannerTaskInput(title='School',starts_at=datetime(2026,11,20,10),ends_at=datetime(2026,11,20,9),timezone='Asia/Kolkata'),self.user,self.db)
+        self.db.insert.assert_not_called()
+
+    def test_delete_planner_task_is_owner_scoped(self):
+        self.db.first.return_value=None
+        with self.assertRaises(HTTPException) as error:
+            student.delete_planner_task(uuid4(),self.user,self.db)
+        self.assertEqual(error.exception.status_code,404)
+        self.assertEqual(self.db.first.call_args.kwargs['u'],self.user['id'])
 
     def test_search_is_paginated_and_hides_meeting_links(self):
         self.db.all.return_value=[{'id':str(i)} for i in range(21)]

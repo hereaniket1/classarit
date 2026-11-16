@@ -1521,7 +1521,10 @@ session capacity, books future sessions and appears in the existing staff roster
 only receive their linked upcoming sessions and their own enrollments, including those
 added by staff using their verified email. A class meeting link is available only after
 booking. No workspace membership is created, and student accounts cannot manage workspaces,
-classes, venues or schedules. Personal study calendars are deferred.
+classes, venues or schedules. Migration `021_student_planner.sql` adds a separate personal
+planner: students can add tasks with their own title, date/time, location and notes without
+creating a Classarit class or workspace schedule. Their dashboard shows these tasks alongside
+enrolled classes in a seven-day calendar.
 
 Existing classes remain private. Owners/managers can select the student-search checkbox in
 the class editor. Assigned teachers and managers can also use **List in student search** and

@@ -18,19 +18,20 @@
   <aside class="workspace-sidebar">
     <a class="workspace-brand" href="/student"><span class="brand-mark">C</span> Classarit</a>
     <nav aria-label="Student navigation">
-      <a class="account-nav" href="#upcoming">Upcoming classes</a>
+      <a class="account-nav" href="#upcoming">My week</a>
       <a class="account-nav" href="#discover">Find classes</a>
+      <a class="account-nav" href="#planner">My planner</a>
     </nav>
   </aside>
   <main class="workspace-main account-main">
     <header class="section-heading account-heading"><div><h1>My learning</h1><p class="subtext">Your student account is always free.</p></div>{% include "components/user_menu.html" %}</header>
     <div id="notice" role="status" aria-live="polite" hidden></div>
     <section id="upcoming" class="student-section">
-      <h2>Upcoming classes</h2><p class="subtext">Your next 100 scheduled classes. Times are shown in each class’s time zone.</p>
-      <div id="student-agenda" aria-live="polite"></div>
+      <h2>Upcoming 7 days</h2><p class="subtext">Classes and personal tasks in your local time zone.</p>
+      <div id="student-calendar" class="student-calendar" aria-live="polite"></div>
       <h2 class="mt-4">My classes</h2><div id="student-enrollments" class="student-results"></div>
     </section>
-    <section id="discover" class="student-section" hidden>
+    <section id="discover" class="student-section">
       <h2>Find classes</h2><p class="subtext">Explore classes offered by teachers and organizations. Join directly when seats are available.</p>
       <form id="student-search" class="student-filters">
         <label>Class or organization<input class="form-control" name="q" maxlength="150" placeholder="Piano, maths…"></label>
@@ -40,6 +41,17 @@
       </form>
       <div id="student-results" class="student-results" aria-live="polite"></div>
       <div class="student-pagination"><button type="button" id="student-prev" class="btn btn-outline-primary" disabled>Previous</button><button type="button" id="student-next" class="btn btn-outline-primary" disabled>Next</button></div>
+    </section>
+    <section id="planner" class="student-section">
+      <h2>My planner</h2><p class="subtext">Track school, tuition, study time, errands, or any task outside Classarit.</p>
+      <form id="planner-form" class="planner-form">
+        <label>Task or activity<input class="form-control" name="title" maxlength="200" required placeholder="School, tuition, revise history…"></label>
+        <div class="planner-time-grid"><label>Starts<input class="form-control" name="starts_at" type="datetime-local" required></label><label>Ends<input class="form-control" name="ends_at" type="datetime-local"></label></div>
+        <label>Location <span class="text-muted">optional</span><input class="form-control" name="location" maxlength="250" placeholder="School, library, online…"></label>
+        <label>Notes <span class="text-muted">optional</span><textarea class="form-control" name="notes" rows="2" maxlength="2000"></textarea></label>
+        <button class="btn btn-primary" type="submit">Add to planner</button><p id="planner-status" role="status" aria-live="polite"></p>
+      </form>
+      <div id="planner-list" class="planner-list" aria-live="polite"></div>
     </section>
   </main>
 </div></body></html>

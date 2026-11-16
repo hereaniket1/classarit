@@ -1,11 +1,12 @@
 """Free student discovery and self-enrollment, without workspace membership."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field, ConfigDict
 
 from ..auth.dependencies import require_user
 from ..views import templates
@@ -15,6 +16,16 @@ from ..workspaces.services.catalog import enroll_student
 from .dashboard import context
 
 router = APIRouter()
+
+
+class PlannerTaskInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    title: str = Field(min_length=1, max_length=200)
+    starts_at: datetime
+    ends_at: datetime | None = None
+    timezone: str = Field(default='Asia/Kolkata', min_length=3, max_length=80)
+    location: str | None = Field(default=None, max_length=250)
+    notes: str | None = Field(default=None, max_length=2000)
 
 
 def require_student(user=Depends(require_user)):
@@ -75,7 +86,39 @@ def upcoming(user=Depends(require_student), db=Depends(transaction)):
         JOIN {s}.workspaces w ON w.id=e.workspace_id AND w.status='ACTIVE'
         WHERE st.linked_user_id=:u AND st.status='ACTIVE' AND e.status IN ('ACTIVE','PAUSED')
         AND p.status='ACTIVE' ORDER BY p.name,p.id""",u=user['id'])
-    return {'sessions': sessions, 'classes': classes}
+    tasks = db.all("""SELECT id,title,starts_at,ends_at,timezone,location,notes,status
+        FROM {s}.student_planner_tasks
+        WHERE student_user_id=:u AND status='ACTIVE' AND ends_at>CURRENT_TIMESTAMP
+        ORDER BY starts_at,id LIMIT 100""", u=user['id'])
+    return {'sessions': sessions, 'classes': classes, 'tasks': tasks}
+
+
+@router.post('/api/student/planner/tasks', status_code=201)
+def create_planner_task(payload: PlannerTaskInput, user=Depends(require_student), db=Depends(transaction)):
+    try:
+        zone = ZoneInfo(payload.timezone)
+    except Exception:
+        raise HTTPException(422, 'Choose a valid time zone.')
+    start = payload.starts_at
+    end = payload.ends_at or (start + timedelta(hours=1))
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=zone)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=zone)
+    if end <= start:
+        raise HTTPException(422, 'End time must be after the start time.')
+    return db.insert('student_planner_tasks', student_user_id=user['id'], title=payload.title,
+                     starts_at=start, ends_at=end, timezone=payload.timezone,
+                     location=payload.location, notes=payload.notes, status='ACTIVE')
+
+
+@router.delete('/api/student/planner/tasks/{task_id}')
+def delete_planner_task(task_id: UUID, user=Depends(require_student), db=Depends(transaction)):
+    row = db.first("""UPDATE {s}.student_planner_tasks SET status='CANCELLED',updated_at=CURRENT_TIMESTAMP
+        WHERE id=:id AND student_user_id=:u AND status='ACTIVE' RETURNING id""", id=task_id, u=user['id'])
+    if not row:
+        raise HTTPException(404, 'Planner task not found.')
+    return {'ok': True}
 
 
 @router.post('/api/student/classes/{program_id}/enroll')
