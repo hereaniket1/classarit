@@ -19,10 +19,12 @@ try {
     if(fail)return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({detail:'This class is full.'})});
     if(url.pathname.includes('/planner/tasks')){taskCreated=true;body={id:'task-1'};}else{enrolled=true;body={id:'enrollment'};}
    }else if(url.pathname.endsWith('/upcoming'))body={classes:enrolled?[{name:'Maths',workspace_name:'Study studio',status:'ACTIVE'}]:[],sessions:enrolled?[{title:'Maths',workspace_name:'Study studio',starts_at:'2026-11-20T09:00:00Z',ends_at:'2026-11-20T10:00:00Z',timezone:'Asia/Kolkata',delivery_mode:'ONLINE',meeting_url:'https://example.com/lesson'}]:[],tasks:taskCreated?[{id:'task-1',title:'School project',starts_at:'2026-11-19T09:00:00Z',ends_at:'2026-11-19T10:00:00Z',timezone:'Asia/Kolkata',status:'ACTIVE'}]:[]};
+   else if(url.pathname.endsWith('/calendar'))body={month:'2026-11',sessions:enrolled?[{title:'Maths',starts_at:'2026-11-20T09:00:00Z',ends_at:'2026-11-20T10:00:00Z'}]:[],tasks:taskCreated?[{id:'task-1',title:'School project',starts_at:'2026-11-19T09:00:00Z',ends_at:'2026-11-19T10:00:00Z'}]:[]};
    else{lastSearch=url.searchParams;body={classes:[{id:'course',name:'Maths <script>alert(1)</script>',description:'Practice together',workspace_name:'Study studio',teachers:'Teacher',default_delivery_mode:'ONLINE',default_duration_minutes:60,seats_available:1,enrolled}],has_more:false};}
    return route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
   }
-  const file=url.pathname.startsWith('/static/')?path.join(process.cwd(),'app',url.pathname):path.join(fixture,'student.html');
+  const fixtureName=url.pathname==='/student/planner'?'student-planner':url.pathname==='/student/calendar'?'student-calendar':'student';
+  const file=url.pathname.startsWith('/static/')?path.join(process.cwd(),'app',url.pathname):path.join(fixture,`${fixtureName}.html`);
   await route.fulfill({body:await fs.readFile(file),contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});
  });
  await page.goto('http://classarit.test/student');
@@ -47,16 +49,21 @@ try {
  await page.getByText('This class is full.').waitFor();
  assert.equal(await page.getByRole('button',{name:'Join class',exact:true}).isEnabled(),true);
  fail=false;await page.getByRole('button',{name:'Join class',exact:true}).click();
- await page.getByRole('button',{name:'Already enrolled'}).waitFor();
- await page.goto('http://classarit.test/student#upcoming');
+ await page.getByRole('button',{name:'Enrolled',exact:true}).waitFor();
+ await page.goto('http://classarit.test/student');
  await page.locator('.student-calendar-item.class-item').waitFor();
  assert.equal(await page.locator('.student-calendar-item.class-item').count(),1);
  assert.equal(await page.locator('#student-enrollments h3').textContent(),'Maths');
+ await page.goto('http://classarit.test/student/planner');
  await page.locator('#planner-form [name="title"]').fill('School project');
  await page.locator('#planner-form [name="starts_at"]').fill('2026-11-19T09:00');
  await page.locator('#planner-form button[type="submit"]').click();
  await page.getByText('Added to your planner.').waitFor();
  assert.equal(taskCreated,true);
+ await page.goto('http://classarit.test/student/calendar?month=2026-11');
+ await page.locator('#month-title').waitFor();
+ assert.equal(await page.locator('.student-month-grid').count(),1);
+ assert.equal(await page.locator('.month-item.task-item').count(),1);
  assert.deepEqual(errors,[]);
  console.log('Passed: student navigation, no staff controls, safe results, filters, mobile layout, enrollment error recovery and upcoming classes.');
 }finally{await browser.close();}

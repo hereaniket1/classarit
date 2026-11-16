@@ -27,7 +27,10 @@ render('teacher','account_dashboard.html',user={**user,'user_type':'MEMBER'},app
 render('workspace','workspace.html',workspace={**w,'workspace_type':'INSTITUTE'},workspaces=[{**c,'roles':['OWNER','TEACHER']} for c in cards],organization_account=True,owner_view=True,display_role='OWNER',executive_access=False)
 render('onboarding','workspace.html')
 render('invitation','workspace.html',invitation='fixture-token')
-render('student','student.html',user={**user,'account_type':'STUDENT','user_type':'MEMBER'},display_role='STUDENT')
+student_fixture={**user,'account_type':'STUDENT','user_type':'MEMBER'}
+render('student','student.html',user=student_fixture,display_role='STUDENT',student_view='dashboard')
+render('student-calendar','student.html',user=student_fixture,display_role='STUDENT',student_view='calendar')
+render('student-planner','student.html',user=student_fixture,display_role='STUDENT',student_view='planner')
 render('home','home.html')
 render('login','login.html')
 render('callback','auth/callback.html',success=False,message='Please try signing in again.')

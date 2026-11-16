@@ -14,19 +14,19 @@
   <script src="/static/responsive.js" defer></script><script src="/static/user-menu.js" defer></script>
   <script type="module" src="/static/student.js"></script>
 </head>
-<body><div class="workspace-shell">
+<body data-student-view="{{ student_view }}"><div class="workspace-shell">
   <aside class="workspace-sidebar">
     <a class="workspace-brand" href="/student"><span class="brand-mark">C</span> Classarit</a>
     <nav aria-label="Student navigation">
-      <a class="account-nav" href="#upcoming">My week</a>
-      <a class="account-nav" href="#discover">Find classes</a>
-      <a class="account-nav" href="#planner">My planner</a>
+      <a class="account-nav" href="/student">Dashboard</a>
+      <a class="account-nav" href="/student/calendar">Calendar</a>
+      <a class="account-nav" href="/student/planner">Planner</a>
     </nav>
   </aside>
   <main class="workspace-main account-main">
-    <header class="section-heading account-heading"><div><h1>My learning</h1><p class="subtext">Your student account is always free.</p></div>{% include "components/user_menu.html" %}</header>
+    <header class="section-heading account-heading"><div><h1>My learning</h1><p class="subtext">Your student account is always free.</p></div>{% if student_view == 'dashboard' %}<a class="btn btn-outline-primary student-find-link" href="#discover">Find classes</a>{% endif %}{% include "components/user_menu.html" %}</header>
     <div id="notice" role="status" aria-live="polite" hidden></div>
-    <section id="upcoming" class="student-section">
+    {% if student_view == 'dashboard' %}<section id="upcoming" class="student-section">
       <h2>Upcoming 7 days</h2><p class="subtext">Classes and personal tasks in your local time zone.</p>
       <div id="student-calendar" class="student-calendar" aria-live="polite"></div>
       <h2 class="mt-4">My classes</h2><div id="student-enrollments" class="student-results"></div>
@@ -41,8 +41,12 @@
       </form>
       <div id="student-results" class="student-results" aria-live="polite"></div>
       <div class="student-pagination"><button type="button" id="student-prev" class="btn btn-outline-primary" disabled>Previous</button><button type="button" id="student-next" class="btn btn-outline-primary" disabled>Next</button></div>
-    </section>
-    <section id="planner" class="student-section">
+    </section>{% endif %}
+    {% if student_view == 'calendar' %}<section id="calendar-page" class="student-section">
+      <div class="student-calendar-toolbar"><div><h2>Calendar</h2><p class="subtext">Your enrolled classes and personal planner items, month by month.</p></div><div class="month-selector"><button type="button" id="month-prev" aria-label="Previous month">‹</button><strong id="month-title"></strong><button type="button" id="month-next" aria-label="Next month">›</button></div></div>
+      <div id="student-month-calendar" class="student-month-calendar" aria-live="polite"></div>
+    </section>{% endif %}
+    {% if student_view == 'planner' %}<section id="planner" class="student-section">
       <h2>My planner</h2><p class="subtext">Track school, tuition, study time, errands, or any task outside Classarit.</p>
       <form id="planner-form" class="planner-form">
         <label>Task or activity<input class="form-control" name="title" maxlength="200" required placeholder="School, tuition, revise history…"></label>
@@ -52,6 +56,6 @@
         <button class="btn btn-primary" type="submit">Add to planner</button><p id="planner-status" role="status" aria-live="polite"></p>
       </form>
       <div id="planner-list" class="planner-list" aria-live="polite"></div>
-    </section>
+    </section>{% endif %}
   </main>
 </div></body></html>

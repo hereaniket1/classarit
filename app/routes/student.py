@@ -36,7 +36,17 @@ def require_student(user=Depends(require_user)):
 
 @router.get('/student')
 def student_page(request: Request, user=Depends(require_student)):
-    return templates.TemplateResponse('student.html', context(request, user, display_role='STUDENT'))
+    return templates.TemplateResponse('student.html', context(request, user, display_role='STUDENT', student_view='dashboard'))
+
+
+@router.get('/student/calendar')
+def student_calendar_page(request: Request, user=Depends(require_student)):
+    return templates.TemplateResponse('student.html', context(request, user, display_role='STUDENT', student_view='calendar'))
+
+
+@router.get('/student/planner')
+def student_planner_page(request: Request, user=Depends(require_student)):
+    return templates.TemplateResponse('student.html', context(request, user, display_role='STUDENT', student_view='planner'))
 
 
 @router.get('/api/student/classes')
@@ -91,6 +101,29 @@ def upcoming(user=Depends(require_student), db=Depends(transaction)):
         WHERE student_user_id=:u AND status='ACTIVE' AND ends_at>CURRENT_TIMESTAMP
         ORDER BY starts_at,id LIMIT 100""", u=user['id'])
     return {'sessions': sessions, 'classes': classes, 'tasks': tasks}
+
+
+@router.get('/api/student/calendar')
+def calendar_month(month: str = Query(pattern=r'^\d{4}-\d{2}$'), user=Depends(require_student), db=Depends(transaction)):
+    try:
+        year, number = (int(part) for part in month.split('-'))
+        zone = ZoneInfo('Asia/Kolkata')
+        start = datetime(year, number, 1, tzinfo=zone)
+        end = datetime(year + (number == 12), 1 if number == 12 else number + 1, 1, tzinfo=zone)
+    except Exception:
+        raise HTTPException(422, 'Choose a valid calendar month.')
+    sessions = db.all("""SELECT cs.id,COALESCE(cs.title,p.name) AS title,cs.starts_at,cs.ends_at,
+        cs.delivery_mode,w.name AS workspace_name,w.timezone
+        FROM {s}.session_participants sp JOIN {s}.students st ON st.id=sp.student_id AND st.workspace_id=sp.workspace_id
+        JOIN {s}.class_sessions cs ON cs.id=sp.session_id AND cs.workspace_id=sp.workspace_id
+        JOIN {s}.teaching_programs p ON p.id=cs.program_id AND p.workspace_id=cs.workspace_id
+        JOIN {s}.workspaces w ON w.id=cs.workspace_id AND w.status='ACTIVE'
+        WHERE st.linked_user_id=:u AND sp.status='BOOKED' AND cs.status='SCHEDULED'
+          AND cs.starts_at>=:start AND cs.starts_at<:end ORDER BY cs.starts_at,cs.id""",u=user['id'],start=start,end=end)
+    tasks = db.all("""SELECT id,title,starts_at,ends_at,timezone,location,notes,status
+        FROM {s}.student_planner_tasks WHERE student_user_id=:u AND status='ACTIVE'
+          AND starts_at>=:start AND starts_at<:end ORDER BY starts_at,id""",u=user['id'],start=start,end=end)
+    return {'month': month, 'sessions': sessions, 'tasks': tasks}
 
 
 @router.post('/api/student/planner/tasks', status_code=201)
