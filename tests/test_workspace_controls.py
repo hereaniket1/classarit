@@ -31,8 +31,8 @@ class WorkspaceControlTests(unittest.TestCase):
                 context = dashboard.workspace_page(SimpleNamespace(session={}), a)
             self.assertEqual(context['can_add_workspace'], count < 3)
             html = templates.get_template('workspace.html').render(**context)
-            self.assertEqual('>Add workspace</a>' in html, count < 3)
-            self.assertIn('id="make-default-workspace"', html)
+            self.assertNotIn('>Add workspace</a>', html)
+            self.assertNotIn('id="make-default-workspace"', html)
             self.assertIn('Manage workspaces', html)
 
     def test_individual_has_no_extra_workspace_controls(self):

@@ -65,3 +65,18 @@
 .agenda-today{margin-bottom:26px}.agenda-week-heading{font-size:20px;margin:0 0 16px}.agenda-week{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.agenda-week .agenda-day{margin:0}.agenda-week .agenda-empty{padding:12px 0;margin:0}
 @media(max-width:760px){.workspace-heading-row{gap:10px}.user-dropdown summary{padding:7px;gap:6px}.user-menu-name{max-width:100px}.user-dropdown .account-avatar{display:none}.workspace-heading h1{font-size:20px!important}.agenda-week{grid-template-columns:1fr}.workspace-user-header>.quick-actions{gap:6px}.workspace-user-header>.quick-actions .quick-actions-label{width:100%;flex-basis:100%!important}#workspace-clock{font-size:11px}}
 .workspace-main .workspace-user-header{margin-bottom:22px}
+.user-dropdown .user-chevron{width:20px;height:20px;transition:transform .2s ease;color:#71809a}
+.user-dropdown summary:hover .user-chevron,.user-dropdown summary:focus-visible .user-chevron{transform:translateY(3px)}
+.user-dropdown[open] .user-chevron{transform:rotate(180deg)}
+.user-menu-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.edit-profile-link{font-size:12px;white-space:nowrap;color:#245bff;text-decoration:none}
+.user-dropdown-panel>#logout{border-top:1px solid #e6ecf5;border-radius:0;margin-top:12px;padding-top:14px;color:#b43b49}
+.agenda-calendar.workspace-card{padding:0;overflow:hidden;margin-bottom:24px}
+.agenda-calendar .calendar-head h2{font-size:18px;margin:0}.agenda-calendar .calendar-head>small{font-size:11px;color:#78879c}
+.agenda-calendar.agenda-week{display:block}
+.agenda-calendar.agenda-today .weekday-row,.agenda-calendar.agenda-today .month-grid{grid-template-columns:1fr}
+.agenda-calendar .calendar-day.agenda-day{margin:0;min-height:72px;height:72px;box-shadow:none}
+.agenda-calendar .calendar-day.today strong{border-radius:6px;padding:0 6px}
+.agenda-calendar .calendar-day strong{font-size:12px}.agenda-free{font-size:10px;color:#98a4b5}
+.agenda-legend{border:0;padding-left:0;margin-bottom:12px}
+@media(prefers-reduced-motion:reduce){.user-dropdown .user-chevron{transition:none}.user-dropdown summary:hover .user-chevron{transform:none}}
+@media(max-width:760px){.agenda-calendar .calendar-day strong{font-size:10px}.agenda-calendar .calendar-head{padding:12px}.agenda-calendar .calendar-day.agenda-day{padding:4px 2px;min-height:68px;height:68px}}

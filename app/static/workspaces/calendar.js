@@ -187,6 +187,20 @@ export function renderCalendar(s) {
   return `<section class="workspace-card month-calendar compact-calendar calendar-view-${view} ${calendarState.loading ? "is-loading" : ""}" aria-busy="${calendarState.loading}"><div class="calendar-head"><div class="month-selector"><button data-calendar-control="previous" aria-label="Previous ${view === 'week' ? '7 days' : view}">‹</button><h2>${esc(title)}</h2><button data-calendar-control="next" aria-label="Next ${view === 'week' ? '7 days' : view}">›</button></div><div class="calendar-toolbar"><div class="calendar-view-switch" role="group" aria-label="Calendar view">${[["day","Day"],["week","7 days"],["month","Month"]].map(([key,label])=>`<button type="button" data-calendar-control="view-${key}" aria-pressed="${view===key}">${label}</button>`).join('')}</div><button class="btn btn-outline-primary" data-calendar-control="today">Today</button></div></div><div class="calendar-legend">${[['program','Class'],['session','Event'],['check','Completed']].map(([i,label])=>`<span class="calendar-key kind-${i}">${icon(i)} ${label}</span>`).join('')}<small>Click a day for details</small></div><div class="calendar-surface"><div class="weekday-row">${weekdays.map(d=>`<span>${d}</span>`).join('')}</div><div class="month-grid">${calendarCells(s).map(d=>d ? `<button class="calendar-day${d.today ? ' today' : ''}${d.past ? ' past' : ''}" data-calendar-day="${d.key}" aria-label="${esc(dayLabel(d.key))}: ${d.sessions.length} activities"><strong>${esc(dayNumber(d.key))}</strong><span class="day-markers">${d.sessions.slice(0,INLINE_SLOT_LIMIT).map(x=>{const [i,label]=kind(x);return `<span class="day-marker kind-${i}" title="${esc(label+': '+x.title+' · '+slot(x,d.key,zone))}">${icon(i)}</span>`;}).join('')}${d.sessions.length>INLINE_SLOT_LIMIT ? `<small>+${d.sessions.length-INLINE_SLOT_LIMIT}</small>` : ''}</span></button>` : '<span class="calendar-blank" aria-hidden="true"></span>').join('')}</div><div class="calendar-loader">${window.ClassaritLoading?.calendar('calendar') || 'Loading calendar…'}</div></div></section>`;
 }
 
+export function renderAgendaCalendar(s) {
+  const zone=s.workspace.timezone, today=dateKey(new Date(),zone);
+  const days=Array.from({length:8},(_,i)=>shiftDay(today,i));
+  const grid = (keys,label,css) => `<section class="workspace-card compact-calendar agenda-calendar ${css}"><div class="calendar-head"><h2>${label}</h2><small>${esc(zone)}</small></div><div class="weekday-row">${keys.map(key=>`<span>${esc(new Date(`${key}T12:00:00Z`).toLocaleDateString(undefined,{timeZone:'UTC',weekday:'short'}))}</span>`).join('')}</div><div class="month-grid">${keys.map(key=>{
+    const sessions=agendaSessions(s,key);
+    return `<button type="button" class="calendar-day agenda-day${key===today?' today':''}" data-calendar-day="${key}" aria-label="${esc(dayLabel(key))}: ${sessions.length} activities"><strong>${esc(new Date(`${key}T12:00:00Z`).toLocaleDateString(undefined,{timeZone:'UTC',month:'short',day:'numeric'}))}</strong><span class="day-markers">${sessions.slice(0,INLINE_SLOT_LIMIT).map(x=>{const [glyph,label]=kind(x);return `<span class="day-marker kind-${glyph}" title="${esc(label+': '+x.title+' · '+slot(x,key,zone))}">${icon(glyph)}</span>`;}).join('')}${sessions.length>INLINE_SLOT_LIMIT?`<small>+${sessions.length-INLINE_SLOT_LIMIT}</small>`:''}</span>${sessions.length?'':'<small class="agenda-free">Free</small>'}</button>`;
+  }).join('')}</div></section>`;
+  return `<div class="calendar-legend agenda-legend">${[['program','Class'],['session','Event']].map(([glyph,label])=>`<span class="calendar-key kind-${glyph}">${icon(glyph)} ${label}</span>`).join('')}<small>Click a date to see all schedules</small></div>`+grid(days.slice(0,1),'Today','agenda-today')+grid(days.slice(1),'Next 7 days','agenda-week');
+}
+function agendaSessions(s,key) {
+  const zone=s.workspace.timezone;
+  return s.sessions.filter(x=>x.status==='SCHEDULED' && new Date(x.ends_at)>new Date() && dateKey(x.starts_at,zone)<=key && dateKey(new Date(new Date(x.ends_at)-1),zone)>=key).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
+}
+
 function closeCalendarPopup() {
   const modal = document.querySelector("#calendar-popup");
   if (modal) modal.hidden = true;
@@ -211,10 +225,10 @@ function calendarPopup() {
   return modal;
 }
 
-export function openCalendarDay(s, key, manager = false) {
-  const day = calendarDays(s).find((d) => d.key === key);
+export function openCalendarDay(s, key, manager = false, agenda = false) {
+  const day = agenda ? {key, sessions:agendaSessions(s,key),past:key<dateKey(new Date(),s.workspace.timezone)} : calendarDays(s).find((d) => d.key === key);
   if (!day) return;
-  if (calendarState.view === 'month') calendarState.anchor = key;
+  if (!agenda && calendarState.view === 'month') calendarState.anchor = key;
   const manageable = manager && !day.past;
   const modal = calendarPopup();
   const panel = modal.querySelector(".calendar-popup-panel");

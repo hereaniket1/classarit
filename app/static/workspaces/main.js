@@ -290,7 +290,7 @@ document.addEventListener("click", e => {
     const manager = snapshot.roles.some((r) =>
       ["OWNER", "ADMIN", "OPERATOR"].includes(r),
     );
-    openCalendarDay(snapshot,day.dataset.calendarDay,manager);
+    openCalendarDay(snapshot,day.dataset.calendarDay,manager,tab === "dashboard");
     return;
   }
   const popup=document.querySelector("#calendar-popup");
@@ -299,16 +299,6 @@ document.addEventListener("click", e => {
     dateKey: button.dataset.dateKey,
   });
 }, true);
-
- document.querySelector('#make-default-workspace')?.addEventListener('click', async event => {
-   const button = event.currentTarget;
-   button.disabled = true;
-   try {
-     await request('/api/account/default-workspace', 'POST', {workspace_id: workspaceId});
-     button.textContent = 'Default workspace';
-     notice('This workspace will open by default after login.');
-   } catch(error) { button.disabled = false; notice(error.message, true); }
- });
 
 const userMenu = document.querySelector('#user-dropdown');
 document.addEventListener('click', event => {

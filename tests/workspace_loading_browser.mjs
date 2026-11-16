@@ -117,9 +117,9 @@ try {
   await page.locator('#cancel-editor').click();
  }
  await page.locator('#user-dropdown summary').click();
- await page.locator('#make-default-workspace').click();
- await page.waitForFunction(()=>document.querySelector('#make-default-workspace').textContent==='Default workspace');
- assert.equal(await page.locator('#make-default-workspace').isDisabled(),true);
+ assert.equal(await page.locator('#make-default-workspace').count(),0);
+ assert.equal(await page.locator('.user-menu-heading a[href="/profile"]').textContent(),'Edit profile');
+ assert.equal(await page.locator('.user-dropdown-panel > :last-child').getAttribute('id'),'logout');
  await page.keyboard.press('Escape');
  assert.equal(await page.locator('#user-dropdown').getAttribute('open'),null);
  await page.locator('#user-dropdown summary').click();
@@ -128,6 +128,9 @@ try {
  await page.locator('[data-workspace-dashboard]').click();
  await page.locator('.agenda-today').waitFor();
  assert.equal(await page.locator('.agenda-week .agenda-day').count(),7);
+ await page.locator('.agenda-week [data-calendar-day]').last().click();
+ await page.locator('#calendar-popup').waitFor();
+ await page.locator('[aria-label="Close day schedule"]').click();
  assert.deepEqual(errors,[]);
  console.log('Passed: workspace section navigation, failed load retry, failed save cleanup and successful save retry.');
 } finally {await browser.close();}
