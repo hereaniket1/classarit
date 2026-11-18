@@ -1,0 +1,32 @@
+<section class="creative-page" id="puzzle-page">
+  <div class="creative-heading"><h2>Puzzle</h2>
+    <div class="game-picker" role="tablist" aria-label="Choose a game">
+      <button type="button" id="snake-tab" role="tab" aria-controls="snake-panel" aria-selected="true" data-game="snake">Snake</button>
+      <button type="button" id="ttt-tab" role="tab" aria-controls="ttt-panel" aria-selected="false" tabindex="-1" data-game="ttt">Tic-tac-toe</button>
+    </div>
+  </div>
+  <div class="game-grid">
+    <article class="game-card ttt-card" id="ttt-panel" role="tabpanel" aria-labelledby="ttt-tab" hidden>
+      <div class="game-card-heading"><span class="game-symbol" aria-hidden="true">✕ ○</span><div><h3>Tic-tac-toe</h3><p>Three in a row. One clever move.</p></div></div>
+      <div class="game-settings"><label>Play with<select id="ttt-mode"><option value="computer">Computer</option><option value="friend">A friend</option></select></label>
+        <button type="button" id="ttt-new">New round</button></div>
+      <p id="ttt-status" class="game-status" role="status">Your turn — X</p>
+      <div id="ttt-board" class="ttt-board" role="group" aria-label="Tic-tac-toe board">
+        {% for i in range(9) %}<button type="button" disabled data-ttt-cell="{{ i }}" aria-label="Row {{ i // 3 + 1 }}, column {{ i % 3 + 1 }}, empty"></button>{% endfor %}
+      </div>
+      <div class="game-score"><span>X wins <strong id="ttt-x-score">0</strong></span><span>Draws <strong id="ttt-draw-score">0</strong></span><span>O wins <strong id="ttt-o-score">0</strong></span></div>
+    </article>
+    <article class="game-card snake-card" id="snake-panel" role="tabpanel" aria-labelledby="snake-tab">
+      <div class="game-card-heading"><span class="game-symbol" aria-hidden="true">〰</span><div><h3>Snake</h3><p>Find a rhythm. Follow the fruit.</p></div></div>
+      <div class="game-settings"><label>Speed<select id="snake-speed"><option value="180">Easy</option><option value="125">Medium</option><option value="90">Fast</option></select></label>
+        <button type="button" id="snake-toggle" class="btn btn-primary">Start</button><button type="button" id="snake-restart">Restart</button></div>
+      <div class="snake-scores"><span>Score <strong id="snake-score">0</strong></span><span>Best <strong id="snake-best">0</strong></span></div>
+      <canvas id="snake-canvas" width="400" height="400" tabindex="0" aria-label="Snake game. Use arrow keys or WASD to move. Space pauses."></canvas>
+      <p id="snake-status" class="game-status" role="status">Press Start. Use arrows, WASD, or swipe.</p>
+      <div class="snake-controls" role="group" aria-label="Snake direction">
+        <button type="button" data-snake-direction="up" aria-label="Move up">↑</button>
+        <div><button type="button" data-snake-direction="left" aria-label="Move left">←</button><button type="button" data-snake-direction="down" aria-label="Move down">↓</button><button type="button" data-snake-direction="right" aria-label="Move right">→</button></div>
+      </div>
+    </article>
+  </div>
+</section>

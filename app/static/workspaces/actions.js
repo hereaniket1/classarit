@@ -179,6 +179,7 @@ export function action(s, key, id, refresh, context = {}) {
   };
   const defaultSessionStart = () => {
     if (!context.dateKey) return "";
+    if (context.startTime) return `${context.dateKey}T${context.startTime}`;
     return context.dateKey === today
       ? local(new Date(Date.now() + 60 * 60 * 1000))
       : `${context.dateKey}T09:00`;
@@ -360,9 +361,12 @@ export function action(s, key, id, refresh, context = {}) {
     const startDate =
       context.dateKey || local(new Date(Date.now() + 24 * 60 * 60 * 1000)).slice(0, 10);
     const startTime =
-      context.dateKey === today
+      context.startTime || (context.dateKey === today
         ? local(new Date(Date.now() + 60 * 60 * 1000)).slice(11, 16)
-        : "09:00";
+        : "09:00");
+    const selectedEnd = context.startTime
+      ? new Date(new Date(`${context.dateKey}T${context.startTime}:00Z`).getTime() + 30 * 60000).toISOString().slice(0,16)
+      : "";
     const weekly = { field: "schedule_type", values: ["weekly"] };
     const once = { field: "schedule_type", values: ["once"] };
     edit(
@@ -407,6 +411,7 @@ export function action(s, key, id, refresh, context = {}) {
           visibleWhen: once,
         }),
         f("ends_at", "End (optional; uses class duration)", "datetime-local", {
+          value: selectedEnd,
           visibleWhen: once,
         }),
         f("start_date", "First week starts", "date", {
@@ -421,7 +426,7 @@ export function action(s, key, id, refresh, context = {}) {
           visibleWhen: weekly,
         }),
         f("duration_minutes", "Duration in minutes", "number", {
-          value: program.default_duration_minutes || 60,
+          value: context.durationMinutes || program.default_duration_minutes || 60,
           min: 1,
           max: 1440,
           visibleWhen: weekly,

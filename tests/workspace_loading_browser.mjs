@@ -6,7 +6,7 @@ const require=createRequire(process.env.CLASSARIT_PLAYWRIGHT_PACKAGE||import.met
 const {chromium}=require('playwright');
 const root=process.cwd();
 const fixture=path.join(root,'.cache','loading-review');
-const browser=await chromium.launch({headless:true,channel:'chrome'});
+const browser=await chromium.launch({headless:true,channel:'chrome',args:['--unsafely-treat-insecure-origin-as-secure=http://classarit.test']});
 try {
  const page=await browser.newPage();
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -49,13 +49,17 @@ try {
     assert.equal(await page.locator('.calendar-key').count(),3);
     assert.equal(await page.locator('.calendar-head > .calendar-legend .calendar-key').count(),3);
     if(width===390) {
-     assert.ok(await page.locator('.month-calendar').evaluate(el=>el.getBoundingClientRect().bottom<=640));
+     assert.ok(await page.locator('.month-calendar').evaluate(el=>el.scrollWidth<=el.clientWidth+1));
      assert.ok(await page.locator('.workspace-name-actions').evaluate(el=>Math.abs(el.querySelector('h1').getBoundingClientRect().top-el.querySelector('.quick-actions').getBoundingClientRect().top)<20));
     }
     await page.locator('[data-calendar-day]').first().click();
     await page.locator('#calendar-popup').waitFor();
     await page.locator('[aria-label="Close day schedule"]').click();
     await page.locator('.calendar-day').filter({has:page.locator('.day-marker')}).first().click();
+    assert.equal(await page.locator('.day-marker svg').count(),0);
+    assert.equal(await page.locator('.calendar-label-text').first().textContent(),'Piano Begi…');
+    assert.ok(await page.locator('.calendar-label').evaluateAll(labels=>labels.every(label=>
+      label.getBoundingClientRect().bottom<=label.closest('.calendar-day').getBoundingClientRect().bottom)));
     assert.equal(await page.locator('#calendar-popup .compact-day-session').count(),7);
     assert.equal(await page.locator('.day-popup-heading [data-calendar-action="session"] svg').count(),1);
     assert.equal(await page.locator('#calendar-popup [data-calendar-action="reschedule"] svg').count(),7);
@@ -66,7 +70,7 @@ try {
     if(width===1440) {
      const occupied=page.locator('.calendar-day').filter({has:page.locator('.day-marker')}).first();
      assert.equal(await occupied.locator('.day-marker').count(),5);
-     assert.equal(await occupied.locator('.day-markers small').textContent(),'+2');
+     assert.equal(await occupied.locator('.day-markers small').textContent(),'+2 more');
      await page.locator('.calendar-day').filter({has:page.locator('.day-marker')}).first().click();
      assert.equal(await page.locator('#calendar-popup .day-session').count(),7);
      const before=referenceLoads;
@@ -96,6 +100,14 @@ try {
      if(view==='week') {
       assert.equal(await page.locator('[data-calendar-day]').first().getAttribute('data-calendar-day'),start);
       assert.notEqual((await page.locator('[data-calendar-day]').last().getAttribute('data-calendar-day')).slice(0,7),start.slice(0,7));
+      assert.equal(await page.locator('[data-calendar-slot]').count(),336);
+      const slot=page.locator('[data-calendar-slot][data-start-time="10:30"]:not(:disabled)').first();
+      const selected=await slot.getAttribute('data-calendar-slot');
+      await slot.click();
+      await page.waitForFunction(()=>document.querySelector('#editor').open);
+      assert.equal(await page.locator('#editor [name="starts_at"]').inputValue(),selected+'T10:30');
+      assert.equal(await page.locator('#editor [name="ends_at"]').inputValue(),selected+'T11:00');
+      await page.locator('#cancel-editor').click();
      }
      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
     }

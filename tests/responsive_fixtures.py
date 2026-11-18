@@ -32,6 +32,8 @@ render('student','student.html',user=student_fixture,display_role='STUDENT',stud
 render('student-calendar','student.html',user=student_fixture,display_role='STUDENT',student_view='calendar')
 render('student-classes','student.html',user=student_fixture,display_role='STUDENT',student_view='classes')
 render('student-planner','student.html',user=student_fixture,display_role='STUDENT',student_view='planner')
+render('student-draw','student.html',user=student_fixture,display_role='STUDENT',student_view='draw')
+render('student-puzzle','student.html',user=student_fixture,display_role='STUDENT',student_view='puzzle')
 render('home','home.html')
 render('login','login.html')
 render('callback','auth/callback.html',success=False,message='Please try signing in again.')

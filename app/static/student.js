@@ -1,16 +1,159 @@
-import './account-dashboard.js';
-const $=s=>document.querySelector(s),view=document.body.dataset.studentView;
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const zone=Intl.DateTimeFormat().resolvedOptions().timeZone||'Asia/Kolkata',empty=t=>`<p class="student-empty">${esc(t)}</p>`,time=d=>new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date(d));
-async function request(path,method='GET',body){const r=await fetch(path,{method,headers:{'Content-Type':'application/json','X-CSRF-Token':$('meta[name="csrf-token"]').content},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(25000)});const p=await r.json().catch(()=>({}));if(!r.ok)throw Error(typeof p.detail==='string'?p.detail:'Unable to complete this request.');return p;}
-function report(e){const n=$('#notice');if(n){n.hidden=false;n.textContent=e.name==='TimeoutError'?'The request timed out. Refresh to check whether your change was saved.':e.message;}}
-function renderWeek(data){const root=$('#student-calendar');if(!root)return;const t=new Date();t.setHours(0,0,0,0);const all=[...(data.sessions||[]).map(x=>({...x,kind:'class'})),...(data.tasks||[]).map(x=>({...x,kind:'task'}))],key=d=>{const x=new Date(d);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;};root.innerHTML=`<section class="workspace-card month-calendar compact-calendar agenda-calendar agenda-week"><div class="calendar-head"><h2>Upcoming classes</h2><small>${esc(zone)}</small></div><div class="weekday-row">${Array.from({length:7},(_,i)=>`<span>${new Intl.DateTimeFormat(undefined,{weekday:'short'}).format(new Date(t.getTime()+i*86400000))}</span>`).join('')}</div><div class="month-grid">${Array.from({length:7},(_,i)=>{const d=new Date(t.getTime()+i*86400000),items=all.filter(x=>key(x.starts_at)===key(d));return `<div class="calendar-day agenda-day${i?'':' today'}"><strong>${i?' '+new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'}).format(d):'Today'}</strong>${items.map(x=>x.kind==='class'?`<a class="day-marker student-class-link" href="/student/classes">▣ ${esc(x.title)}</a>`:`<a class="day-marker task-item" href="/student/calendar?task=${encodeURIComponent(x.id)}">✓ ${esc(x.title)}</a>`).join('')||'<small class="agenda-free">Free</small>'}</div>`}).join('')}</div></section>`;}
-async function loadUpcoming(){try{const d=await request('/api/student/upcoming');if($('#student-calendar'))renderWeek(d);if($('#student-enrollments'))$('#student-enrollments').innerHTML=(d.classes||[]).map(p=>`<article class="workspace-card"><h3>${esc(p.name)}</h3><small>${esc(p.workspace_name)} · ${esc(p.status)}</small></article>`).join('')||empty('You have not enrolled in any classes yet.');if($('#planner-list'))renderPlanner(d.tasks||[]);}catch(e){report(e);}}
-function renderPlanner(ts){$('#planner-list').innerHTML=ts.map(x=>`<article class="planner-list-item"><a href="/student/calendar?task=${encodeURIComponent(x.id)}"><strong>${esc(x.title)}</strong><small>${esc(new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(new Date(x.starts_at)))}</small></a><button type="button" class="planner-delete" data-task="${esc(x.id)}" aria-label="Delete ${esc(x.title)}">×</button></article>`).join('')||empty('Your personal planner is empty. Add a task above.');}
-const filters={q:'',location:'',mode:''};let offset=0;
-async function search(){const root=$('#student-results');if(!root)return;root.innerHTML='<div class="student-skeleton" role="status"></div>';try{const d=await request('/api/student/classes?'+new URLSearchParams({...filters,offset}));root.innerHTML=d.classes.length?`<div class="student-results-table-wrap"><table class="student-results-table"><thead><tr><th>Class</th><th>Teacher</th><th>Mode</th><th>Location</th><th>Seats</th><th></th></tr></thead><tbody>${d.classes.map(p=>`<tr><td><strong>${esc(p.name)}</strong><small>${esc(p.description||'')}</small></td><td>${esc(p.teachers||'—')}</td><td>${esc(p.default_delivery_mode)}</td><td>${esc(p.location||'Online')}</td><td>${esc(p.seats_available)}</td><td><button class="btn btn-sm btn-primary" type="button" data-enroll="${esc(p.id)}" ${p.enrolled||!p.seats_available?'disabled':''}>${p.enrolled?'Enrolled':p.seats_available?'Join class':'Full'}</button></td></tr>`).join('')}</tbody></table></div>`:empty('No matching classes.');}catch(e){root.innerHTML=empty('Could not load class search.');report(e);}}
-if($('#student-search')){const f=$('#student-search');f.addEventListener('submit',e=>{e.preventDefault();Object.assign(filters,Object.fromEntries(new FormData(f)));offset=0;search();});f.querySelector('[name="q"]').addEventListener('input',()=>{filters.q=f.querySelector('[name="q"]').value;search();});$('#student-results').addEventListener('click',async e=>{const b=e.target.closest('[data-enroll]');if(!b||b.disabled)return;b.disabled=true;b.textContent='Joining…';try{await request(`/api/student/classes/${encodeURIComponent(b.dataset.enroll)}/enroll`,'POST');b.textContent='Enrolled';$('#notice').hidden=false;$('#notice').textContent='You are enrolled. Your class is now on Dashboard.';loadUpcoming();}catch(err){b.disabled=false;b.textContent='Join class';report(err);}});search();}
-async function loadMonth(){const root=$('#student-month-calendar');if(!root)return;const title=$('#month-title'),now=new Date();let month=new URLSearchParams(location.search).get('month')||`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;const draw=async()=>{const d=await request(`/api/student/calendar?month=${month}`);title.textContent=new Intl.DateTimeFormat(undefined,{month:'long',year:'numeric'}).format(new Date(`${month}-01T12:00:00`));const [y,m]=month.split('-').map(Number),first=new Date(y,m-1,1),last=new Date(y,m,0),cells=[];for(let i=0;i<(first.getDay()+6)%7;i++)cells.push(null);for(let i=1;i<=last.getDate();i++)cells.push(new Date(y,m-1,i));while(cells.length%7)cells.push(null);const key=d=>{const x=new Date(d);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;};root.innerHTML=`<section class="workspace-card month-calendar compact-calendar calendar-view-month"><div class="calendar-head"><div class="month-selector"><button data-month="prev" aria-label="Previous month">‹</button><h2>${esc(title.textContent)}</h2><button data-month="next" aria-label="Next month">›</button></div><div class="calendar-legend"><span class="calendar-key kind-program">▣ Class</span><span class="calendar-key kind-check">✓ Planner</span></div><div class="calendar-toolbar"><div class="calendar-view-switch"><button type="button" aria-pressed="false">Day</button><button type="button" aria-pressed="false">7 days</button><button type="button" aria-pressed="true">Month</button></div><button class="btn btn-outline-primary" type="button" data-month="today">Today</button></div></div><div class="weekday-row">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<span>${x}</span>`).join('')}</div><div class="month-grid">${cells.map(day=>day?`<div class="calendar-day"><strong>${day.getDate()}</strong>${[...(d.sessions||[]).filter(x=>key(x.starts_at)===key(day)).map(x=>`<a class="day-marker student-class-link" href="/student/classes">▣ ${esc(x.title)}</a>`),...(d.tasks||[]).filter(x=>key(x.starts_at)===key(day)).map(x=>`<a class="day-marker task-item" href="/student/calendar?task=${encodeURIComponent(x.id)}">✓ ${esc(x.title)}</a>`)].join('')}</div>`:'<span class="calendar-blank"></span>').join('')}</div></section>`;root.querySelector('[data-month="prev"]').onclick=()=>{let[a,b]=month.split('-').map(Number);if(--b<1){b=12;a--;}month=`${a}-${String(b).padStart(2,'0')}`;draw();};root.querySelector('[data-month="next"]').onclick=()=>{let[a,b]=month.split('-').map(Number);if(++b>12){b=1;a++;}month=`${a}-${String(b).padStart(2,'0')}`;draw();};root.querySelector('[data-month="today"]').onclick=()=>{const n=new Date();month=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;draw();};};root.innerHTML='<div class="student-skeleton" role="status"></div>';draw();}
-async function savePlanner(){const f=$('#planner-form');if(!f)return;f.addEventListener('submit',async e=>{e.preventDefault();const b=f.querySelector('button[type="submit"]'),s=$('#planner-status');b.disabled=true;s.textContent='Saving…';try{const d=Object.fromEntries(new FormData(f));d.starts_at=new Date(d.starts_at).toISOString();d.ends_at=d.ends_at?new Date(d.ends_at).toISOString():null;d.repeat_count=Number(d.repeat_count||1);d.timezone=zone;await request('/api/student/planner/tasks','POST',d);f.reset();s.textContent='Added to your planner.';loadUpcoming();}catch(err){s.textContent=err.message;}finally{b.disabled=false;}});}
-document.addEventListener('click',async e=>{const b=e.target.closest('[data-task]');if(!b)return;b.disabled=true;try{await request(`/api/student/planner/tasks/${encodeURIComponent(b.dataset.task)}`,'DELETE');loadUpcoming();}catch(err){b.disabled=false;report(err);}});
-if(view==='dashboard'||view==='classes'||view==='planner')loadUpcoming();if(view==='calendar')loadMonth();if(view==='planner')savePlanner();
+import "./account-dashboard.js";
+import { esc, notice, clearNotice } from "./workspaces/api.js?v=global-loading-20260930";
+import { mountStudentCalendar } from "./student-calendar.js?v=student-calendar";
+import { mountStudentPlanner } from "./student-planner.js";
+import { openStudentPopup } from "./student-popups.js";
+
+const $ = (selector) => document.querySelector(selector);
+const empty = (message) => `<p class="student-empty">${esc(message)}</p>`;
+
+async function request(path, method = "GET", data) {
+  const response = await fetch(path, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": $('meta[name="csrf-token"]').content,
+    },
+    body: data === undefined ? undefined : JSON.stringify(data),
+    signal: AbortSignal.timeout(25000),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (response.status === 401) location.assign("/login");
+  if (!response.ok) {
+    throw new Error(typeof result.detail === "string" ? result.detail : "Unable to complete this request.");
+  }
+  return result;
+}
+
+function report(error, saving = false) {
+  const timeout = saving
+    ? "The request timed out. Check whether your change was saved before trying again."
+    : "The request timed out. Refresh and try again.";
+  notice(error.name === "TimeoutError" ? timeout : error.message, true);
+}
+
+async function loadUpcoming() {
+  try {
+    const data = await request("/api/student/upcoming");
+    const enrollments = $("#student-enrollments");
+    if (enrollments) {
+      enrollments.innerHTML = data.classes.map((item) => `<article class="workspace-card">
+        <h3>${esc(item.name)}</h3><small>${esc(item.workspace_name)} · ${esc(item.status)}</small>
+      </article>`).join("") || empty("You have not enrolled in any classes yet.");
+    }
+  } catch (error) {
+    report(error);
+  }
+}
+
+function initSearch(form) {
+  const initial = new URLSearchParams(location.search);
+  for (const name of ["q", "location", "mode"]) {
+    if (initial.has(name)) form.elements[name].value = initial.get(name);
+  }
+  const root = $("#student-results");
+  const previous = $("#student-prev");
+  const next = $("#student-next");
+  let offset = 0;
+  let version = 0;
+  let debounce;
+  let hasMore = false;
+
+  async function search() {
+    clearTimeout(debounce);
+    const current = ++version;
+    const params = new URLSearchParams(new FormData(form));
+    params.set("offset", offset);
+    root.innerHTML = '<div class="student-skeleton" role="status" aria-label="Loading classes"></div>';
+    previous.disabled = next.disabled = true;
+    try {
+      const data = await request(`/api/student/classes?${params}`);
+      if (current !== version) return;
+      hasMore = data.has_more;
+      const rows = data.classes.map((item) => `<tr>
+        <td><strong>${esc(item.name)}</strong><small>${esc(item.description)}</small></td>
+        <td>${esc(item.teachers || "—")}</td>
+        <td>${esc(item.default_delivery_mode)}</td>
+        <td>${esc(item.location || "Online")}</td>
+        <td>${esc(item.seats_available)}</td>
+        <td><button class="btn btn-sm btn-primary" type="button" data-enroll="${esc(item.id)}"
+          ${item.enrolled || !item.seats_available ? "disabled" : ""}>
+          ${item.enrolled ? "Enrolled" : item.seats_available ? "Join class" : "Full"}
+        </button></td>
+      </tr>`).join("");
+      root.innerHTML = rows ? `<div class="student-results-table-wrap"><table class="student-results-table">
+        <thead><tr><th>Class</th><th>Teacher</th><th>Mode</th><th>Location</th><th>Seats</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>` : empty("No matching classes.");
+    } catch (error) {
+      if (current !== version) return;
+      hasMore = false;
+      root.innerHTML = empty("Could not load class search.");
+      report(error);
+    } finally {
+      if (current === version) {
+        previous.disabled = offset === 0;
+        next.disabled = !hasMore;
+      }
+    }
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    offset = 0;
+    search();
+  });
+  form.elements.q.addEventListener("input", () => {
+    clearTimeout(debounce);
+    offset = 0;
+    debounce = setTimeout(search, 250);
+  });
+  previous.addEventListener("click", () => {
+    offset = Math.max(0, offset - 20);
+    search();
+  });
+  next.addEventListener("click", () => {
+    offset += 20;
+    search();
+  });
+  root.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-enroll]");
+    if (!button || button.disabled) return;
+    clearNotice();
+    button.disabled = true;
+    button.textContent = "Joining…";
+    try {
+      await request(`/api/student/classes/${encodeURIComponent(button.dataset.enroll)}/enroll`, "POST");
+      button.textContent = "Enrolled";
+      notice("You are enrolled.");
+      loadUpcoming();
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "Join class";
+      report(error, true);
+    }
+  });
+  search();
+}
+
+const searchForm = $("#student-search");
+if (searchForm) initSearch(searchForm);
+mountStudentPlanner(request, report).catch(report);
+if (searchForm) loadUpcoming();
+
+$("#quick-search-classes").addEventListener("click", () => {
+  const popup = openStudentPopup("student-search-popup", "Search classes", `
+    <form action="/student/classes" method="get" class="student-popup-search">
+      <label>Class or organization<input class="form-control" name="q" maxlength="150" placeholder="What would you like to learn?"></label>
+      <label>Location<input class="form-control" name="location" maxlength="150" placeholder="City, area or venue"></label>
+      <label>Learning mode<select class="form-select" name="mode"><option value="">All modes</option><option value="ONLINE">Online</option><option value="IN_PERSON">In person</option><option value="HYBRID">Hybrid</option></select></label>
+      <button class="btn btn-primary" type="submit">Search classes</button>
+    </form>`);
+  popup.element.querySelector('input[name="q"]').focus();
+});
+
+const dashboard = $("#student-calendar");
+const calendar = $("#student-month-calendar");
+if (dashboard || calendar) mountStudentCalendar(dashboard || calendar, Boolean(dashboard), request, report);
+if ($("#drawing-canvas")) import("./student-draw.js").then(({ mountDraw }) => mountDraw()).catch(report);
+if ($("#puzzle-page")) import("./student-games.js").then(({ mountGames }) => mountGames()).catch(report);

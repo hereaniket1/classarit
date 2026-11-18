@@ -1,0 +1,35 @@
+<section class="creative-page" id="draw-page">
+  <div class="creative-heading"><h2>Draw</h2>
+    <div class="creative-actions"><button type="button" id="draw-undo">Undo</button><button type="button" id="draw-redo">Redo</button>
+      <button type="button" id="draw-clear">Clear</button><button type="button" id="draw-tools-toggle" aria-expanded="false" aria-controls="draw-tools">Tools</button><button type="button" class="btn btn-primary" id="draw-download">Download PNG</button></div>
+  </div>
+  <div class="draw-workspace">
+    <aside class="draw-tools" id="draw-tools" aria-label="Drawing tools">
+      <div class="draw-tool-grid" role="group" aria-label="Tools">
+        <button type="button" data-draw-tool="pen" aria-pressed="true">✎ <span>Pen</span></button>
+        <button type="button" data-draw-tool="brush" aria-pressed="false">▰ <span>Brush</span></button>
+        <button type="button" data-draw-tool="eraser" aria-pressed="false">▱ <span>Eraser</span></button>
+        <button type="button" data-draw-tool="move" aria-pressed="false">↔ <span>Move shape</span></button>
+      </div>
+      <label class="draw-control">Color<input type="color" id="draw-color" value="#635bff"></label>
+      <div class="draw-swatches" aria-label="Color palette">
+        {% for color in ['#635bff','#ef476f','#ff9f1c','#06b6a0','#2196f3','#18243e'] %}
+        <button type="button" data-draw-color="{{ color }}" style="--swatch:{{ color }}" aria-label="Use {{ color }}"></button>
+        {% endfor %}
+      </div>
+      <label class="draw-control">Size <output id="draw-size-value">5</output><input type="range" id="draw-size" min="1" max="40" value="5"></label>
+      <fieldset class="shape-picker"><legend>Shapes</legend><p>Drag onto the canvas, or select and click to place.</p>
+        <div class="draw-shape-grid">
+          {% for key, symbol, label in [('rectangle','▭','Rectangle'),('circle','○','Circle'),('triangle','△','Triangle'),('star','☆','Star'),('arrow','➜','Arrow')] %}
+          <button type="button" draggable="true" data-shape="{{ key }}" aria-pressed="false" aria-label="Add {{ label }}">{{ symbol }}</button>
+          {% endfor %}
+        </div>
+        <label class="draw-fill"><input type="checkbox" id="draw-fill"> Fill shapes</label>
+      </fieldset>
+    </aside>
+    <div class="draw-paper-wrap">
+      <canvas id="drawing-canvas" width="1000" height="650" tabindex="0" aria-label="Drawing canvas. Use pen or brush to draw, or drag shapes here."></canvas>
+      <div class="draw-save-row"><span id="draw-status" role="status">Your draft saves in this browser.</span><span>Let your ideas wander.</span></div>
+    </div>
+  </div>
+</section>

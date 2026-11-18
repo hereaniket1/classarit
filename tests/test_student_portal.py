@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from fastapi import HTTPException
 
 from app.routes import student
@@ -108,6 +108,27 @@ class StudentPortalTests(unittest.TestCase):
             self.assertTrue('st.linked_user_id=:u' in call.args[0] or 'student_user_id=:u' in call.args[0])
             self.assertEqual(call.kwargs['u'],self.user['id'])
 
+    def test_calendar_uses_local_month_boundaries_and_scopes_overlapping_items(self):
+        self.db.all.return_value = []
+        student.calendar_month('2026-11', self.user, self.db, tz='America/New_York')
+        sessions, tasks = self.db.all.call_args_list
+        for query in (sessions, tasks):
+            self.assertEqual(query.kwargs['u'], self.user['id'])
+            self.assertEqual(query.kwargs['start'], datetime(2026, 11, 1, 4, tzinfo=timezone.utc))
+            self.assertEqual(query.kwargs['end'], datetime(2026, 12, 1, 5, tzinfo=timezone.utc))
+            self.assertIn('ends_at>:start', query.args[0])
+            self.assertIn('starts_at<:end', query.args[0])
+        self.assertIn("st.linked_user_id=:u AND sp.status='BOOKED'", sessions.args[0])
+        self.assertIn("cs.status IN ('SCHEDULED','COMPLETED')", sessions.args[0])
+        self.assertIn('student_user_id=:u', tasks.args[0])
+
+    def test_calendar_rejects_invalid_month_or_timezone(self):
+        for month, tz in [('2026-13', 'Asia/Kolkata'), ('2026-11', 'Not/AZone')]:
+            with self.assertRaises(HTTPException) as error:
+                student.calendar_month(month, self.user, self.db, tz=tz)
+            self.assertEqual(error.exception.status_code, 422)
+        self.db.all.assert_not_called()
+
     def test_planner_task_is_personal_and_defaults_to_one_hour(self):
         self.db.insert.return_value={'id':'task-1'}
         payload=PlannerTaskInput(title='School',starts_at=datetime(2026,11,20,9),timezone='Asia/Kolkata')
@@ -122,6 +143,41 @@ class StudentPortalTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             student.create_planner_task(PlannerTaskInput(title='School',starts_at=datetime(2026,11,20,10),ends_at=datetime(2026,11,20,9),timezone='Asia/Kolkata'),self.user,self.db)
         self.db.insert.assert_not_called()
+
+    def test_planner_weekdays_use_shared_recurrence_and_batch_insert(self):
+        payload = PlannerTaskInput(
+            title='Study', starts_at=datetime(2026, 11, 23, 17, 30),
+            timezone='Asia/Kolkata', duration_minutes=45, repeat='WEEKLY',
+            repeat_weekdays=['MON', 'THU'], repeat_months=1)
+        result = student.create_planner_task(payload, self.user, self.db)
+        table, rows = self.db.insert_many.call_args.args
+        self.assertEqual(table, 'student_planner_tasks')
+        self.assertEqual(len(rows), 9)
+        self.assertEqual(result['count'], len(rows))
+        self.assertEqual(rows[0]['starts_at'], datetime(2026, 11, 23, 12, tzinfo=timezone.utc))
+        self.assertEqual(rows[-1]['starts_at'].date(), date(2026, 12, 21))
+        self.assertTrue(all(row['starts_at'].weekday() in (0, 3) for row in rows))
+        self.assertTrue(all(row['student_user_id'] == self.user['id'] for row in rows))
+        self.assertTrue(all((row['ends_at'] - row['starts_at']).total_seconds() == 2700 for row in rows))
+        self.db.insert.assert_not_called()
+
+    def test_planner_repeats_keep_local_time_across_dst(self):
+        payload = PlannerTaskInput(
+            title='Study', starts_at=datetime(2026, 10, 26, 9),
+            timezone='America/New_York', repeat='WEEKLY',
+            repeat_weekdays=['MON'], repeat_months=1)
+        student.create_planner_task(payload, self.user, self.db)
+        rows = self.db.insert_many.call_args.args[1]
+        self.assertEqual(rows[0]['starts_at'].hour, 13)
+        self.assertEqual(rows[1]['starts_at'].hour, 14)
+
+    def test_planner_rejects_missing_repeat_days_before_insert(self):
+        payload = PlannerTaskInput(title='Study', starts_at=datetime(2026, 11, 23, 9),
+                                   repeat='WEEKLY', repeat_months=3)
+        with self.assertRaises(HTTPException):
+            student.create_planner_task(payload, self.user, self.db)
+        self.db.insert.assert_not_called()
+        self.db.insert_many.assert_not_called()
 
     def test_delete_planner_task_is_owner_scoped(self):
         self.db.first.return_value=None

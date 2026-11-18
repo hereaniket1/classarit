@@ -79,14 +79,15 @@
 .weekday-picker {border:0;margin:0;padding:0;display:grid;gap:8px;}
 .weekday-picker legend {font-size:13px;font-weight:700;color:#20314d;margin-bottom:2px;}
 .weekday-picker div {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}
-.weekday-picker label {margin:0;display:block;}
+.weekday-picker label {margin:0;display:block;position:relative;}
 .weekday-picker input {position:absolute;opacity:0;pointer-events:none;}
-.weekday-picker span {display:flex;align-items:center;justify-content:center;min-height:38px;border:1px solid #b8c8dc;border-radius:999px;background:#fff;color:#39516f;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s,border-color .15s,color .15s,box-shadow .15s;}
+.weekday-picker label > input + span {display:flex;align-items:center;justify-content:center;min-height:38px;border:1px solid #b8c8dc;border-radius:999px;background:#fff;color:#39516f;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s,border-color .15s,color .15s,box-shadow .15s;}
+.weekday-picker .control-action-spinner {position:absolute;right:5px;top:12px;margin:0;pointer-events:none;}
 .weekday-picker input:checked + span {background:#1769ff;border-color:#1769ff;color:#fff;box-shadow:0 6px 14px #1769ff26;}
 .weekday-picker input:focus-visible + span {outline:2px solid #20314d;outline-offset:2px;}
-.weekday-picker span:hover {border-color:#1769ff;color:#1769ff;}
+.weekday-picker label > input + span:hover {border-color:#1769ff;color:#1769ff;}
 .weekday-picker input:checked + span:hover {color:#fff;}
-@media(max-width:700px){.weekday-picker div{grid-template-columns:repeat(4,minmax(0,1fr));}.weekday-picker span{min-height:44px;}}
+@media(max-width:700px){.weekday-picker div{grid-template-columns:repeat(4,minmax(0,1fr));}.weekday-picker label > input + span{min-height:44px;}}
 .workspace-title-row {align-items:center;width:100%;}
 .workspace-title-row .workspace-picker {margin-left:auto;}
 .schedule-page-title {font-weight:900!important;color:#20314d;}

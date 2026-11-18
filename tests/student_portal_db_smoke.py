@@ -8,7 +8,8 @@ from app.auth.database import auth_engine
 from app.workspaces.db import Store
 from app.workspaces.schemas import WorkspaceInput
 from app.workspaces.services.organizations import create_workspace
-from app.routes.student import search_classes, upcoming, self_enroll
+from app.routes.student import (search_classes, upcoming, self_enroll, PlannerTaskInput,
+    create_planner_task, planner_groups, planner_details, update_planner_series, delete_planner_series)
 from fastapi import HTTPException
 
 
@@ -48,6 +49,24 @@ def run():
             else: raise AssertionError('Full class accepted enrollment')
             db.execute('UPDATE {s}.teaching_programs SET student_discoverable=false WHERE id=:p',p=program['id'])
             assert not search_classes(name,'','',0,user,db)['classes']
+            plan = PlannerTaskInput(title='Study series', starts_at=start, repeat='WEEKLY', repeat_count=3)
+            saved = create_planner_task(plan,user,db)
+            groups = planner_groups(user,db)['groups']
+            assert len(groups)==1 and groups[0]['count']==3
+            series_id = saved['series_id']
+            details = planner_details(series_id,user,db)['tasks']
+            assert len(details)==3 and details[0]['recurrence']['repeat']=='WEEKLY'
+            try: planner_details(series_id,outsider,db)
+            except HTTPException as error: assert error.status_code==404
+            else: raise AssertionError('Planner details leaked across accounts')
+            edited = PlannerTaskInput(title='Edited series',starts_at=details[0]['starts_at'],
+                                      duration_minutes=45,preserve_dates=True)
+            update_planner_series(series_id,edited,user,db)
+            updated = planner_details(series_id,user,db)['tasks']
+            assert len(updated)==3 and all(row['title']=='Edited series' for row in updated)
+            assert [row['starts_at'] for row in updated]==[row['starts_at'] for row in details]
+            delete_planner_series(series_id,user,db)
+            assert not planner_groups(user,db)['groups']
             db.execute('SET CONSTRAINTS ALL IMMEDIATE')
             print('Passed: discovery, private-link protection, self-enrollment, duplicate retry, upcoming, isolation, capacity, no staff membership; all synthetic data rolled back.')
         finally:

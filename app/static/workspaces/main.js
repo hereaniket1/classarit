@@ -2,6 +2,7 @@ import {
   getCalendarMonth,
   getCalendarMonths,
   openCalendarDay,
+  prepareCalendar,
   setCalendarLoading,
   setCalendarMonthData,
   updateCalendarView,
@@ -61,6 +62,7 @@ function draw() {
   const target = content();
   if (!target || !snapshot) return;
   target.innerHTML = render(snapshot, tab);
+  prepareCalendar(target);
   target.setAttribute("aria-busy", "false");
   setQuickActionsAvailable(true);
   activeTabButtons();
@@ -278,12 +280,26 @@ document.addEventListener("input", (event) => {
 document.addEventListener("click", e => {
   const control=e.target.closest("[data-calendar-control]");
   const day=e.target.closest("[data-calendar-day]");
+  const timeSlot=e.target.closest("[data-calendar-slot]");
+  const timeEvent=e.target.closest("[data-calendar-event]");
   const button=e.target.closest("[data-calendar-action]");
-  if (!snapshot || (!control && !day && !button)) return;
+  if (!snapshot || (!control && !day && !button && !timeSlot && !timeEvent)) return;
   e.preventDefault();
   e.stopPropagation();
   if (control) {
     moveCalendar(control.dataset.calendarControl);
+    return;
+  }
+  const manager = snapshot.roles.some(role => ["OWNER","ADMIN","OPERATOR"].includes(role));
+  if (timeSlot) {
+    if (!manager || timeSlot.disabled) return;
+    document.querySelectorAll(".calendar-time-slot.is-selected").forEach(slot => slot.classList.remove("is-selected"));
+    timeSlot.classList.add("is-selected");
+    runAction("session", "", { dateKey:timeSlot.dataset.calendarSlot, startTime:timeSlot.dataset.startTime, durationMinutes:30 });
+    return;
+  }
+  if (timeEvent) {
+    openCalendarDay(snapshot,timeEvent.dataset.dateKey,manager,false);
     return;
   }
   if(day) {

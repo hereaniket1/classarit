@@ -1,36 +1,49 @@
 {% from "components/icons.html" import icon %}
+{% set sections = [('dashboard', '/student', 'Dashboard', 'reporting'), ('calendar', '/student/calendar', 'Calendar', 'calendar'), ('classes', '/student/classes', 'Classes', 'classes'), ('planner', '/student/planner', 'Planner', 'session'), ('draw', '/student/draw', 'Draw', 'draw'), ('puzzle', '/student/puzzle', 'Puzzle', 'puzzle')] %}
+{% set page_title = sections|selectattr('0', 'equalto', student_view)|map(attribute='2')|first %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token }}">
-  <title>Student dashboard · Classarit</title>
+  <title>{{ page_title }} · Classarit</title>
   <link rel="stylesheet" href="/static/vendor/bootstrap/bootstrap.min.css">
   <link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/workspace.css">
   <link rel="stylesheet" href="/static/account-dashboard.css"><link rel="stylesheet" href="/static/responsive.css?v=global-loading-20260930">
+  <link rel="stylesheet" href="/static/workspace-compact.css?v=password-profile-20260917">
   <link rel="stylesheet" href="/static/theme.css?v=landing-theme-20260930"><link rel="stylesheet" href="/static/ui-refresh.css">
-  <link rel="stylesheet" href="/static/student.css">
+  <link rel="stylesheet" href="/static/student.css?v=student-calendar">
+  {% if student_view in ['draw','puzzle'] %}<link rel="stylesheet" href="/static/student-play.css">{% endif %}
   <script src="/static/loading.js?v=global-loading-20260930" defer></script>
   <script src="/static/responsive.js" defer></script><script src="/static/user-menu.js" defer></script>
-  <script type="module" src="/static/student.js"></script>
+  <script type="module" src="/static/student.js?v=student-calendar"></script>
 </head>
-<body data-student-view="{{ student_view }}"><div class="workspace-shell">
+<body data-student-id="{{ user.id }}"><div class="workspace-shell">
   <aside class="workspace-sidebar">
     <a class="workspace-brand" href="/student"><span class="brand-mark">C</span> Classarit</a>
-    <nav aria-label="Student navigation">
-      <a class="account-nav" href="/student">Dashboard</a>
-      <a class="account-nav" href="/student/calendar">Calendar</a>
-      <a class="account-nav" href="/student/classes">Classes</a>
-      <a class="account-nav" href="/student/planner">Planner</a>
+    <nav class="student-nav" aria-label="Student navigation">
+      {% for key, url, label, glyph in sections %}
+      <a class="account-nav{{ ' active' if student_view == key else '' }}" href="{{ url }}"{% if student_view == key %} aria-current="page"{% endif %}>{{ icon(glyph) }}<span>{{ label }}</span></a>
+      {% endfor %}
     </nav>
   </aside>
-  <main class="workspace-main account-main">
-    <header class="section-heading account-heading"><div><h1>My learning</h1><p class="subtext">Build your day, stay curious, and keep every learning goal moving forward.</p></div>{% include "components/user_menu.html" %}</header>
+  <main class="workspace-main">
+    <header class="workspace-user-header">
+      <div class="workspace-heading-row student-profile-row">
+        <h1 class="visually-hidden">{{ page_title }}</h1>
+        <div class="student-quick-add" role="group" aria-label="Quick add">
+          <span class="quick-actions-label">Quick add</span>
+          <button type="button" id="add-planner-event" class="btn btn-sm btn-outline-primary labeled-action" disabled>{{ icon('session') }}<span>Add schedule</span></button>
+          <button type="button" id="quick-search-classes" class="btn btn-sm btn-outline-primary labeled-action">{{ icon('search') }}<span>Search classes</span></button>
+          <a href="/student/draw" class="btn btn-sm btn-outline-primary labeled-action">{{ icon('draw') }}<span>Draw</span></a>
+          <a href="/student/puzzle" class="btn btn-sm btn-outline-primary labeled-action">{{ icon('puzzle') }}<span>Puzzle</span></a>
+        </div>
+        {% include "components/user_menu.html" %}
+      </div>
+    </header>
     <div id="notice" role="status" aria-live="polite" hidden></div>
-    {% if student_view == 'dashboard' %}<section id="upcoming" class="student-section">
-      <h2>Upcoming 7 days</h2><p class="subtext">Classes and personal tasks in your local time zone.</p>
-      <div id="student-calendar" class="student-calendar" aria-live="polite"></div>
-    </section>
+    {% if student_view == 'dashboard' %}
+    <div id="student-calendar" aria-live="polite"></div>
     {% endif %}
     {% if student_view == 'classes' %}<section id="discover" class="student-section">
       <h2>Find classes</h2><p class="subtext">Explore classes offered by teachers and organizations. Join directly when seats are available.</p>
@@ -44,22 +57,18 @@
       <div class="student-pagination"><button type="button" id="student-prev" class="btn btn-outline-primary" disabled>Previous</button><button type="button" id="student-next" class="btn btn-outline-primary" disabled>Next</button></div>
       <h3 class="mt-4">Your enrolled classes</h3><div id="student-enrollments" class="student-results"></div>
     </section>{% endif %}
-    {% if student_view == 'calendar' %}<section id="calendar-page" class="student-section">
-      <div class="student-calendar-toolbar"><div><h2>Calendar</h2><p class="subtext">Your enrolled classes and personal planner items, month by month.</p></div><div class="month-selector"><button type="button" id="month-prev" aria-label="Previous month">‹</button><strong id="month-title"></strong><button type="button" id="month-next" aria-label="Next month">›</button></div></div>
-      <div id="student-month-calendar" class="student-month-calendar" aria-live="polite"></div>
-    </section>{% endif %}
+    {% if student_view == 'calendar' %}
+    <div id="student-month-calendar" aria-live="polite"></div>
+    {% endif %}
     {% if student_view == 'planner' %}<section id="planner" class="student-section">
-      <h2>My planner</h2><p class="subtext">Track school, tuition, study time, errands, or any task outside Classarit.</p>
-      <form id="planner-form" class="planner-form">
-        <label>Task or activity<input class="form-control" name="title" maxlength="200" required placeholder="School, tuition, revise history…"></label>
-        <div class="planner-time-grid"><label>Starts<input class="form-control" name="starts_at" type="datetime-local" required></label><label>Ends<input class="form-control" name="ends_at" type="datetime-local"></label></div>
-        <label>Location <span class="text-muted">optional</span><input class="form-control" name="location" maxlength="250" placeholder="School, library, online…"></label>
-        <label>Repeat <select class="form-select" name="repeat"><option value="NONE">Does not repeat</option><option value="DAILY">Every day</option><option value="WEEKLY">Every week</option></select></label>
-        <label>Number of occurrences <input class="form-control" name="repeat_count" type="number" min="1" max="52" value="1"></label>
-        <label>Notes <span class="text-muted">optional</span><textarea class="form-control" name="notes" rows="2" maxlength="2000"></textarea></label>
-        <button class="btn btn-primary" type="submit">Add to planner</button><p id="planner-status" role="status" aria-live="polite"></p>
-      </form>
+      <div class="section-heading">
+        <h2>Planner</h2>
+      </div>
       <div id="planner-list" class="planner-list" aria-live="polite"></div>
     </section>{% endif %}
+    {% if student_view == 'draw' %}{% include "student/draw.html" %}{% endif %}
+    {% if student_view == 'puzzle' %}{% include "student/puzzle.html" %}{% endif %}
   </main>
-</div></body></html>
+</div>
+{% include "components/schedule_editor.html" %}
+</body></html>
