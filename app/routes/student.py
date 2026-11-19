@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, ConfigDict
 from psycopg.types.json import Jsonb
 
@@ -62,14 +63,19 @@ def student_planner_page(request: Request, user=Depends(require_student)):
     return templates.TemplateResponse('student.html', context(request, user, display_role='STUDENT', student_view='planner'))
 
 
+@router.get('/student/entertainment')
+def student_entertainment_page(request: Request, user=Depends(require_student)):
+    return templates.TemplateResponse('student.html', context(request, user, display_role='STUDENT', student_view='entertainment'))
+
+
 @router.get('/student/draw')
 def student_draw_page(request: Request, user=Depends(require_student)):
-    return templates.TemplateResponse('student.html', context(request, user, display_role='STUDENT', student_view='draw'))
+    return RedirectResponse('/student/entertainment#draw', status_code=307)
 
 
 @router.get('/student/puzzle')
 def student_puzzle_page(request: Request, user=Depends(require_student)):
-    return templates.TemplateResponse('student.html', context(request, user, display_role='STUDENT', student_view='puzzle'))
+    return RedirectResponse('/student/entertainment#games', status_code=307)
 
 
 @router.get('/api/student/classes')
@@ -77,26 +83,49 @@ def search_classes(q: str = Query('', max_length=150), location: str = Query('',
                    mode: Literal['', 'ONLINE', 'IN_PERSON', 'HYBRID'] = '',
                    offset: int = Query(0, ge=0, le=10000),
                    user=Depends(require_student), db=Depends(transaction)):
+    # Discovery is intentionally opt-in: do not expose a full catalogue before a
+    # student submits a search. The legacy location/mode parameters remain in the
+    # API signature for existing clients, but the student UI now folds every
+    # searchable field into one query.
+    query = q.strip()
+    if not query:
+        return {'classes': [], 'has_more': False}
     # Explicit projection: no private meeting URLs, contacts, rosters or business identity.
-    rows = db.all("""SELECT p.id,p.name,p.description,p.level,p.default_delivery_mode,
-        p.default_duration_minutes,w.name AS workspace_name,w.timezone,
-        v.name AS venue_name,v.address AS location,
-        (SELECT string_agg(u.full_name, ', ' ORDER BY u.full_name)
-         FROM {s}.program_teachers pt JOIN {s}.workspace_memberships m ON m.id=pt.membership_id AND m.workspace_id=pt.workspace_id
-         JOIN {s}.app_users u ON u.id=m.user_id
-         WHERE pt.program_id=p.id AND pt.workspace_id=p.workspace_id AND m.status='ACTIVE') AS teachers,
+    rows = db.all("""WITH program_teachers AS (
+            SELECT pt.workspace_id,pt.program_id,
+                   string_agg(DISTINCT u.full_name, ', ') AS teachers,
+                   string_agg(DISTINCT ue.email::text, ' ') AS teacher_emails
+            FROM {s}.program_teachers pt
+            JOIN {s}.workspace_memberships m ON m.id=pt.membership_id
+                AND m.workspace_id=pt.workspace_id AND m.status='ACTIVE'
+            JOIN {s}.app_users u ON u.id=m.user_id
+            LEFT JOIN {s}.user_emails ue ON ue.app_user_id=u.id
+            GROUP BY pt.workspace_id,pt.program_id
+        )
+        SELECT p.id,p.name,p.description,p.level,p.program_kind,p.teaching_format,
+        p.default_delivery_mode,p.default_duration_minutes,p.capacity,
+        a.name AS activity_name,a.category AS activity_category,a.description AS activity_description,
+        w.name AS workspace_name,w.timezone,w.workspace_type,
+        v.name AS venue_name,v.address AS location,v.directions AS venue_directions,
+        pt.teachers,
         GREATEST(0,p.capacity-(SELECT count(*) FROM {s}.enrollments e
           WHERE e.workspace_id=p.workspace_id AND e.program_id=p.id AND e.status IN ('ACTIVE','PAUSED'))) AS seats_available,
         EXISTS(SELECT 1 FROM {s}.enrollments e JOIN {s}.students st ON st.id=e.student_id AND st.workspace_id=e.workspace_id
           WHERE e.program_id=p.id AND e.workspace_id=p.workspace_id AND st.linked_user_id=:u AND e.status IN ('ACTIVE','PAUSED')) AS enrolled
-        FROM {s}.teaching_programs p JOIN {s}.workspaces w ON w.id=p.workspace_id AND w.status='ACTIVE'
+        FROM {s}.teaching_programs p
+        JOIN {s}.activities a ON a.id=p.activity_id AND a.workspace_id=p.workspace_id AND a.archived_at IS NULL
+        JOIN {s}.workspaces w ON w.id=p.workspace_id AND w.status='ACTIVE'
         LEFT JOIN {s}.venues v ON v.id=p.default_venue_id AND v.workspace_id=p.workspace_id AND v.archived_at IS NULL
+        LEFT JOIN program_teachers pt ON pt.program_id=p.id AND pt.workspace_id=p.workspace_id
         WHERE p.status='ACTIVE' AND p.program_kind='COURSE' AND p.student_discoverable
-          AND (:q='' OR p.name ILIKE :search OR w.name ILIKE :search OR COALESCE(p.description,'') ILIKE :search)
+          AND CONCAT_WS(' ', p.name,p.description,p.level,p.program_kind,p.teaching_format,
+              p.default_delivery_mode,p.default_duration_minutes,p.capacity,
+              a.name,a.category,a.description,w.name,w.timezone,w.workspace_type,
+              v.name,v.address,v.directions,pt.teachers,pt.teacher_emails) ILIKE :search
           AND (:location='' OR v.address ILIKE :place OR v.name ILIKE :place)
           AND (:mode='' OR p.default_delivery_mode=:mode OR (p.default_delivery_mode='HYBRID' AND :mode IN ('ONLINE','IN_PERSON')))
         ORDER BY lower(p.name),p.id LIMIT 21 OFFSET :offset""",
-        u=user['id'], q=q.strip(), search='%'+q.strip()+'%', location=location.strip(),
+        u=user['id'], search='%'+query+'%', location=location.strip(),
         place='%'+location.strip()+'%', mode=mode, offset=offset)
     return {'classes': rows[:20], 'has_more': len(rows)>20}
 
@@ -114,7 +143,8 @@ def upcoming(user=Depends(require_student), db=Depends(transaction)):
         LEFT JOIN {s}.venues v ON v.id=cs.venue_id AND v.workspace_id=cs.workspace_id
         WHERE st.linked_user_id=:u AND sp.status='BOOKED' AND cs.status='SCHEDULED' AND cs.ends_at>CURRENT_TIMESTAMP
         ORDER BY cs.starts_at,cs.id LIMIT 100""",u=user['id'])
-    classes = db.all("""SELECT p.id,p.name,w.name AS workspace_name,e.status
+    classes = db.all("""SELECT p.id,p.name,w.name AS workspace_name,e.status,e.starts_on,e.ends_on,
+        p.default_delivery_mode,p.level
         FROM {s}.enrollments e JOIN {s}.students st ON st.id=e.student_id AND st.workspace_id=e.workspace_id
         JOIN {s}.teaching_programs p ON p.id=e.program_id AND p.workspace_id=e.workspace_id
         JOIN {s}.workspaces w ON w.id=e.workspace_id AND w.status='ACTIVE'

@@ -108,11 +108,11 @@ try {
         });
       }
       if (url.pathname.endsWith('/classes')) {
-        if (url.searchParams.get('location') === 'Pune') submittedSearch = url.searchParams;
+        if (url.searchParams.get('q') === 'Maths Pune') submittedSearch = url.searchParams;
         return json({
           classes: [{
             id: 'course', name: 'Maths <script>alert(1)</script>', description: 'Practice together',
-            workspace_name: 'Study studio', teachers: 'Teacher', default_delivery_mode: 'ONLINE',
+            activity_name: 'Mathematics', workspace_name: 'Study studio', teachers: 'Teacher', default_delivery_mode: 'ONLINE',
             default_duration_minutes: 60, seats_available: 1, enrolled,
           }],
           has_more: false,
@@ -147,6 +147,10 @@ try {
   await page.keyboard.press('Escape');
 
   await page.getByRole('navigation').getByRole('link', { name: 'Classes', exact: true }).click();
+  assert.equal(await page.locator('#student-results-table').count(), 0);
+  assert.equal(await page.locator('#student-results .student-results-table').count(), 0);
+  await page.locator('#student-search [name="q"]').fill('Maths Pune');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   const enroll = page.getByRole('button', { name: 'Join class', exact: true });
   await enroll.waitFor();
   assert.equal(await page.locator('#student-results script').count(), 0);
@@ -155,13 +159,10 @@ try {
     await assertFits();
     await page.screenshot({ path: path.join(fixture, `student-discovery-${width}.png`), fullPage: true });
   }
-  await page.locator('#student-search [name="q"]').fill('Maths');
-  await page.locator('#student-search [name="location"]').fill('Pune');
-  await page.locator('#student-search [name="mode"]').selectOption('IN_PERSON');
+  await page.locator('#student-search [name="q"]').fill('Maths Pune');
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await enroll.waitFor();
-  assert.equal(submittedSearch.get('location'), 'Pune');
-  assert.equal(submittedSearch.get('mode'), 'IN_PERSON');
+  assert.equal(submittedSearch.get('q'), 'Maths Pune');
   await enroll.click();
   await page.getByText('This class is full.').waitFor();
   assert.equal(await enroll.isEnabled(), true);

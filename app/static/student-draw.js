@@ -4,9 +4,8 @@ export function mountDraw() {
   const color = document.querySelector("#draw-color");
   const size = document.querySelector("#draw-size");
   const status = document.querySelector("#draw-status");
-  const storageKey = "classarit-drawing:" + document.body.dataset.studentId;
   const undo = [], redo = [];
-  let scene = [], tool = "pen", selectedShape = null, current = null, moving = null, frame = 0, saveTimer;
+  let scene = [], tool = "pen", selectedShape = null, current = null, moving = null, frame = 0;
   const shapeNames = new Set(["rectangle", "circle", "triangle", "star", "arrow"]);
   const workspace = document.querySelector(".draw-workspace");
   const toolsToggle = document.querySelector("#draw-tools-toggle");
@@ -29,13 +28,7 @@ export function mountDraw() {
   };
 
   function save() {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(scene));
-        status.textContent = "Draft saved in this browser.";
-      } catch { status.textContent = "Browser storage is full. Download your drawing to keep it."; }
-    }, 400);
+    status.textContent = "Draft lives only while this page is open. Download PNG to keep it.";
   }
   function snapshot() {
     undo.push(structuredClone(scene));
@@ -211,15 +204,6 @@ export function mountDraw() {
       setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     }, "image/png");
   };
-  try {
-    const stored = JSON.parse(localStorage.getItem(storageKey) || "[]");
-    if (Array.isArray(stored)) {
-      scene = stored.filter(item => /^#[0-9a-f]{6}$/i.test(item.color) && Number.isFinite(item.size) &&
-        (item.kind === "shape" ? shapeNames.has(item.shape) && [item.x,item.y,item.width,item.height].every(Number.isFinite) :
-          item.kind === "stroke" && Array.isArray(item.points) && item.points.length <= 10000 &&
-          item.points.every(point => Number.isFinite(point.x) && Number.isFinite(point.y))));
-    }
-  } catch { status.textContent = "Start a new drawing. Download PNG to keep a copy."; }
   function fitCanvas() {
     const bounds = canvas.getBoundingClientRect();
     if (!bounds.width) return;
@@ -235,9 +219,10 @@ export function mountDraw() {
   const resizeObserver = new ResizeObserver(fitCanvas);
   resizeObserver.observe(workspace);
   window.addEventListener("resize",fitCanvas);
+  document.addEventListener("student-entertainment-change", event => {
+    if (event.detail?.panel === "draw") requestAnimationFrame(() => { fitCanvas(); paint(); });
+  });
   window.addEventListener("pagehide", () => {
-    clearTimeout(saveTimer);
-    try { localStorage.setItem(storageKey, JSON.stringify(scene)); } catch { /* The download remains available. */ }
     if (frame) cancelAnimationFrame(frame);
     resizeObserver.disconnect();
     window.removeEventListener("resize",fitCanvas);

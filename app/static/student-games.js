@@ -1,6 +1,9 @@
 export function mountGames() {
   mountTicTacToe();
   const pauseSnake = mountSnake();
+  document.addEventListener("student-entertainment-change", event => {
+    if (event.detail?.panel !== "games") pauseSnake();
+  });
   const tabs = [...document.querySelectorAll("[data-game]")];
   function selectGame(tab) {
     if (tab.dataset.game !== "snake") pauseSnake();
@@ -104,11 +107,9 @@ function mountSnake() {
   const toggle = document.querySelector("#snake-toggle");
   const status = document.querySelector("#snake-status");
   const speed = document.querySelector("#snake-speed");
-  const bestKey = "classarit-snake-best:" + document.body.dataset.studentId;
   const count = 20, tile = canvas.width / count;
   let snake, direction, queuedDirection, food, score = 0, best = 0, timer;
   let running = false, gameOver = false, started = false, touchStart;
-  try { best = Math.max(0, Number(localStorage.getItem(bestKey)) || 0); } catch { /* Scores still work in memory. */ }
   document.querySelector("#snake-best").textContent = best;
 
   function placeFood() {
@@ -161,7 +162,6 @@ function mountSnake() {
       score += 10; document.querySelector("#snake-score").textContent = score;
       if (score > best) {
         best = score; document.querySelector("#snake-best").textContent = best;
-        try { localStorage.setItem(bestKey, String(best)); } catch { /* Keep best score in memory. */ }
       }
       food = placeFood();
       if (!food) {

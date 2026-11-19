@@ -1,0 +1,60 @@
+<section class="creative-page entertainment-page" id="entertainment-page">
+  <div class="entertainment-hero">
+    <div class="entertainment-picker" role="tablist" aria-label="Entertainment options">
+      <button type="button" id="entertainment-games-tab" role="tab" data-entertainment-tab="games" aria-controls="entertainment-games-panel" aria-selected="false" tabindex="-1">
+        <span class="entertainment-option-icon" aria-hidden="true">✦</span><span>Games</span><span class="game-tag">GAME</span>
+      </button>
+      <button type="button" id="entertainment-draw-tab" role="tab" data-entertainment-tab="draw" aria-controls="entertainment-draw-panel" aria-selected="true">
+        <span class="entertainment-option-icon" aria-hidden="true">✎</span><span>Draw</span>
+      </button>
+      <button type="button" id="entertainment-voice-tab" role="tab" data-entertainment-tab="voice" aria-controls="entertainment-voice-panel" aria-selected="false" tabindex="-1">
+        <span class="entertainment-option-icon" aria-hidden="true">◉</span><span>Voice recorder</span>
+      </button>
+      <button type="button" id="entertainment-photo-tab" role="tab" data-entertainment-tab="photo" aria-controls="entertainment-photo-panel" aria-selected="false" tabindex="-1">
+        <span class="entertainment-option-icon" aria-hidden="true">▣</span><span>Photo booth</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="entertainment-panel" id="entertainment-games-panel" role="tabpanel" aria-labelledby="entertainment-games-tab" hidden>
+    {% include "student/puzzle.html" %}
+  </div>
+
+  <div class="entertainment-panel" id="entertainment-draw-panel" role="tabpanel" aria-labelledby="entertainment-draw-tab">
+    {% include "student/draw.html" %}
+  </div>
+
+  <section class="entertainment-panel media-panel" id="entertainment-voice-panel" role="tabpanel" aria-labelledby="entertainment-voice-tab" hidden>
+    <p class="media-instruction">Record a thought, melody or practice note. Download it before leaving this page.</p>
+    <div class="media-card voice-recorder" id="voice-recorder">
+      <div class="media-visual voice-visual" aria-hidden="true"><span class="voice-orb">●</span><span class="voice-wave"></span><span class="voice-wave"></span><span class="voice-wave"></span></div>
+      <div class="media-controls">
+        <span id="voice-timer" class="media-timer">00:00</span>
+        <button type="button" class="btn btn-primary" id="voice-start">Start recording</button>
+        <button type="button" id="voice-stop" disabled>Stop</button>
+        <button type="button" id="voice-discard" disabled>Discard</button>
+        <a id="voice-download" class="btn btn-outline-primary" download="classarit-voice.webm" hidden>Download audio</a>
+      </div>
+      <audio id="voice-preview" controls hidden></audio>
+      <p class="media-status" id="voice-status" role="status">Select Start recording when you are ready.</p>
+    </div>
+  </section>
+
+  <section class="entertainment-panel media-panel" id="entertainment-photo-panel" role="tabpanel" aria-labelledby="entertainment-photo-tab" hidden>
+    <p class="media-instruction">Take a still photo with your camera, then download it before leaving this page.</p>
+    <div class="media-card photo-booth" id="photo-booth">
+      <div class="photo-stage">
+        <video id="photo-video" autoplay muted playsinline aria-label="Camera preview" hidden></video>
+        <canvas id="photo-canvas" width="1280" height="720" aria-label="Captured photo" hidden></canvas>
+        <div class="photo-placeholder" id="photo-placeholder"><span aria-hidden="true">▣</span><strong>Your camera preview will appear here</strong><small>Camera access starts only when you press Start camera.</small></div>
+      </div>
+      <div class="media-controls">
+        <button type="button" class="btn btn-primary" id="photo-start">Start camera</button>
+        <button type="button" id="photo-take" disabled>Take photo</button>
+        <button type="button" id="photo-retake" disabled>Retake</button>
+        <a id="photo-download" class="btn btn-outline-primary" download="classarit-photo.png" hidden>Download photo</a>
+      </div>
+      <p class="media-status" id="photo-status" role="status">Your camera is off.</p>
+    </div>
+  </section>
+</section>

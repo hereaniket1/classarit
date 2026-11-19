@@ -1,5 +1,5 @@
 {% from "components/icons.html" import icon %}
-{% set sections = [('dashboard', '/student', 'Dashboard', 'reporting'), ('calendar', '/student/calendar', 'Calendar', 'calendar'), ('classes', '/student/classes', 'Classes', 'classes'), ('planner', '/student/planner', 'Planner', 'session'), ('draw', '/student/draw', 'Draw', 'draw'), ('puzzle', '/student/puzzle', 'Puzzle', 'puzzle')] %}
+{% set sections = [('dashboard', '/student', 'Dashboard', 'reporting'), ('calendar', '/student/calendar', 'Calendar', 'calendar'), ('classes', '/student/classes', 'Classes', 'classes'), ('planner', '/student/planner', 'Planner', 'session'), ('entertainment', '/student/entertainment', 'Entertainment', 'puzzle')] %}
 {% set page_title = sections|selectattr('0', 'equalto', student_view)|map(attribute='2')|first %}
 <!doctype html>
 <html lang="en">
@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="/static/workspace-compact.css?v=password-profile-20260917">
   <link rel="stylesheet" href="/static/theme.css?v=landing-theme-20260930"><link rel="stylesheet" href="/static/ui-refresh.css">
   <link rel="stylesheet" href="/static/student.css?v=student-calendar">
-  {% if student_view in ['draw','puzzle'] %}<link rel="stylesheet" href="/static/student-play.css">{% endif %}
+  {% if student_view == 'entertainment' %}<link rel="stylesheet" href="/static/student-play.css">{% endif %}
   <script src="/static/loading.js?v=global-loading-20260930" defer></script>
   <script src="/static/responsive.js" defer></script><script src="/static/user-menu.js" defer></script>
   <script type="module" src="/static/student.js?v=student-calendar"></script>
@@ -35,8 +35,8 @@
           <span class="quick-actions-label">Quick add</span>
           <button type="button" id="add-planner-event" class="btn btn-sm btn-outline-primary labeled-action" disabled>{{ icon('session') }}<span>Add schedule</span></button>
           <button type="button" id="quick-search-classes" class="btn btn-sm btn-outline-primary labeled-action">{{ icon('search') }}<span>Search classes</span></button>
-          <a href="/student/draw" class="btn btn-sm btn-outline-primary labeled-action">{{ icon('draw') }}<span>Draw</span></a>
-          <a href="/student/puzzle" class="btn btn-sm btn-outline-primary labeled-action">{{ icon('puzzle') }}<span>Puzzle</span></a>
+          <a href="/student/entertainment#draw" class="btn btn-sm btn-outline-primary labeled-action">{{ icon('draw') }}<span>Draw</span></a>
+          <a href="/student/entertainment#voice" class="btn btn-sm btn-outline-primary labeled-action">{{ icon('microphone') }}<span>Voice recorder</span></a>
         </div>
         {% include "components/user_menu.html" %}
       </div>
@@ -46,16 +46,17 @@
     <div id="student-calendar" aria-live="polite"></div>
     {% endif %}
     {% if student_view == 'classes' %}<section id="discover" class="student-section">
-      <h2>Find classes</h2><p class="subtext">Explore classes offered by teachers and organizations. Join directly when seats are available.</p>
-      <form id="student-search" class="student-filters">
-        <label>Class or organization<input class="form-control" name="q" maxlength="150" placeholder="Piano, maths…"></label>
-        <label>Location<input class="form-control" name="location" maxlength="150" placeholder="City, area or venue"></label>
-        <label>Learning mode<select class="form-select" name="mode"><option value="">All modes</option><option value="ONLINE">Online</option><option value="IN_PERSON">In person</option><option value="HYBRID">Hybrid</option></select></label>
-        <button class="btn btn-primary" type="submit">Search</button>
+      <div class="classes-intro"><p class="classes-eyebrow">DISCOVER · LEARN · GROW</p></div>
+      <form id="student-search" class="student-search-form">
+        <label class="student-search-field">
+          <span class="visually-hidden">Search classes</span>
+          <span class="student-search-input"><span class="student-search-icon" aria-hidden="true">{{ icon('search') }}</span><input class="form-control" name="q" maxlength="150" autocomplete="off" placeholder="Search by class, teacher, subject, organization, location or any detail…"></span>
+        </label>
+        <button class="btn btn-primary" type="submit"><span>Search</span></button>
       </form>
       <div id="student-results" class="student-results" aria-live="polite"></div>
-      <div class="student-pagination"><button type="button" id="student-prev" class="btn btn-outline-primary" disabled>Previous</button><button type="button" id="student-next" class="btn btn-outline-primary" disabled>Next</button></div>
-      <h3 class="mt-4">Your enrolled classes</h3><div id="student-enrollments" class="student-results"></div>
+      <div class="student-registration-heading"><h3>Your registrations</h3><span>Classes you’ve joined</span></div>
+      <div id="student-enrollments" class="student-results" aria-live="polite"></div>
     </section>{% endif %}
     {% if student_view == 'calendar' %}
     <div id="student-month-calendar" aria-live="polite"></div>
@@ -66,8 +67,7 @@
       </div>
       <div id="planner-list" class="planner-list" aria-live="polite"></div>
     </section>{% endif %}
-    {% if student_view == 'draw' %}{% include "student/draw.html" %}{% endif %}
-    {% if student_view == 'puzzle' %}{% include "student/puzzle.html" %}{% endif %}
+    {% if student_view == 'entertainment' %}{% include "student/entertainment.html" %}{% endif %}
   </main>
 </div>
 {% include "components/schedule_editor.html" %}
